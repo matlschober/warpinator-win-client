@@ -1,0 +1,28 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WarpinatorWinClient.App", "WarpinatorWinClient.App\WarpinatorWinClient.App.csproj", "{5A0163BA-D962-4E19-BE92-A6440A9B7793}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WarpinatorWinClient.Core", "WarpinatorWinClient.Core\WarpinatorWinClient.Core.csproj", "{95C73BF4-5937-450D-9C29-57BD0221811F}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{5A0163BA-D962-4E19-BE92-A6440A9B7793}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{5A0163BA-D962-4E19-BE92-A6440A9B7793}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{5A0163BA-D962-4E19-BE92-A6440A9B7793}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{5A0163BA-D962-4E19-BE92-A6440A9B7793}.Release|Any CPU.Build.0 = Release|Any CPU
+		{95C73BF4-5937-450D-9C29-57BD0221811F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{95C73BF4-5937-450D-9C29-57BD0221811F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{95C73BF4-5937-450D-9C29-57BD0221811F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{95C73BF4-5937-450D-9C29-57BD0221811F}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+EndGlobal

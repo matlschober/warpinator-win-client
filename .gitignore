@@ -1,0 +1,36 @@
+# Build outputs
+bin/
+obj/
+publish/
+
+# User and IDE files
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+.vs/
+
+# Logs and temporary files
+*.log
+*build-output*.txt
+handshake-log*.txt
+duplex-fix*.txt
+keepalive-fix*.txt
+secure-session*.txt
+starttransfer-retry*.txt
+transfer-build*.txt
+transfer-opinfo-fix*.txt
+
+# Runtime files
+runtime.log
+
+# OS files
+Thumbs.db
+Desktop.ini
+
+# NuGet
+packages/
+
+# Test and coverage
+TestResults/
+coverage/
