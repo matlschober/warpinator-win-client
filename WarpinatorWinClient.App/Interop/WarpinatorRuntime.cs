@@ -21,6 +21,11 @@ public sealed class WarpinatorRuntime : IDisposable
     private readonly Dictionary<string, RuntimeTransferState> transfers = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, CancellationTokenSource> peerSessionTokens = new(StringComparer.OrdinalIgnoreCase);
     private readonly AppSettings settings;
+    private bool requireReceiveApproval;
+
+    public bool RequireReceiveApproval => Volatile.Read(ref requireReceiveApproval);
+
+    public void SetReceiveApprovalRequired(bool required) => Volatile.Write(ref requireReceiveApproval, required);
 
     private LocalMachineProfile? localProfile;
     private WarpCertificateManager? certificateManager;
@@ -33,6 +38,7 @@ public sealed class WarpinatorRuntime : IDisposable
     private int searchInProgress;
     private CancellationTokenSource? discoveryCancellation;
     private Task? discoveryTask;
+    private long snapshotRevision;
 
     public event EventHandler<WarpinatorRuntimeSnapshot>? SnapshotChanged;
 
@@ -43,6 +49,7 @@ public sealed class WarpinatorRuntime : IDisposable
     public WarpinatorRuntime(AppSettings settings)
     {
         this.settings = settings;
+        requireReceiveApproval = settings.RequireReceiveApproval;
     }
 
     public async Task StartAsync(CancellationToken cancellationToken)
@@ -199,11 +206,22 @@ public sealed class WarpinatorRuntime : IDisposable
         }
 
         List<CancellationTokenSource> sessionTokens;
+        var cancelledApproval = false;
         lock (gate)
         {
+            foreach (var transfer in transfers.Values.Where(transfer => transfer.Status == "Awaiting approval"))
+            {
+                transfer.Status = "Cancelled";
+                transfer.CompletedAtUtc = DateTimeOffset.UtcNow;
+                transfer.Summary = "The local service stopped before this receive request was approved.";
+                cancelledApproval = true;
+            }
             sessionTokens = peerSessionTokens.Values.ToList();
             peerSessionTokens.Clear();
         }
+
+        if (cancelledApproval)
+            PublishSnapshot("Pending receive requests cancelled.", "Service stopped", "No pending files were received.");
 
         foreach (var sessionToken in sessionTokens)
         {
@@ -418,6 +436,7 @@ public sealed class WarpinatorRuntime : IDisposable
         var transferKey = CreateTransferKey(request.Info.Ident, request.Info.Timestamp);
         RuntimeTransferState transferState;
         string peerDisplayName;
+        bool startImmediately;
 
         lock (gate)
         {
@@ -427,15 +446,20 @@ public sealed class WarpinatorRuntime : IDisposable
                 return;
             }
 
-            if (!transfers.TryGetValue(transferKey, out transferState!))
+            if (localProfile is null || request.Receiver != localProfile.ServiceId)
             {
-                transferState = new RuntimeTransferState(transferKey)
-                {
-                    PeerId = request.Info.Ident,
-                    StartedAtUtc = DateTimeOffset.UtcNow
-                };
-                transfers[transferKey] = transferState;
+                throw new RpcException(new Status(StatusCode.InvalidArgument, "The receive request targets a different device."));
             }
+
+            // Repeated offers must not reset approval or restart an existing operation.
+            if (transfers.TryGetValue(transferKey, out var existing)
+                && (existing.IsStreamActive || existing.Status is "Awaiting approval" or "Completed")) return;
+            transferState = new RuntimeTransferState(transferKey)
+            {
+                PeerId = request.Info.Ident,
+                StartedAtUtc = DateTimeOffset.UtcNow
+            };
+            transfers[transferKey] = transferState;
 
             peerDisplayName = string.IsNullOrWhiteSpace(peerState.DisplayName) ? request.Info.Ident : peerState.DisplayName;
             transferState.PeerId = request.Info.Ident;
@@ -450,30 +474,83 @@ public sealed class WarpinatorRuntime : IDisposable
             transferState.TotalSize = request.Size;
             transferState.TotalCount = request.Count;
             transferState.TopLevelNames = request.TopDirBasenames.ToArray();
-            transferState.Status = "Awaiting stream";
-            transferState.Summary = $"Accepted {transferState.Name} from {peerDisplayName}. Preparing secure receive stream.";
-
-            if (transferState.IsStreamActive)
-            {
-                RuntimeLog.Write($"Transfer request for '{transferState.Name}' already being processed.");
-                PublishSnapshot(
-                    $"Transfer already active for {transferState.Name}.",
-                    "Inbound transfer active",
-                    "Watch the transfer history while the current receive completes.");
-                return;
-            }
-
             transferState.IsInbound = true;
-            transferState.IsStreamActive = true;
+            var approvalRequired = RequireReceiveApproval;
+            transferState.Status = approvalRequired ? "Awaiting approval" : "Awaiting stream";
+            transferState.Summary = approvalRequired
+                ? $"{peerDisplayName} wants to send {transferState.Name}. Waiting for your approval."
+                : $"Accepted {transferState.Name} from {peerDisplayName}. Preparing secure receive stream.";
+            transferState.IsStreamActive = transferState.Status != "Awaiting approval";
+            startImmediately = transferState.IsStreamActive;
         }
 
-        RuntimeLog.Write($"Accepted incoming transfer request '{transferState.Name}' from {peerDisplayName}: advertised size={request.Size}, items={request.Count}.");
+        RuntimeLog.Write($"Incoming transfer request '{transferState.Name}' from {peerDisplayName}: advertised size={request.Size}, items={request.Count}, status={transferState.Status}.");
         PublishSnapshot(
-            $"Accepted incoming transfer from {peerDisplayName}.",
-            "Inbound transfer active",
-            "Receiving the file stream from Linux into the configured save folder.");
+            transferState.Summary,
+            transferState.IsStreamActive ? "Inbound transfer active" : "Receive approval required",
+            "Incoming files are saved only after the receive request is accepted.");
 
-        _ = Task.Run(() => ReceiveTransferFromPeerAsync(transferKey));
+        if (startImmediately) _ = Task.Run(() => ReceiveTransferFromPeerAsync(transferKey));
+    }
+
+    public bool ApproveIncomingTransfer(string transferId)
+    {
+        lock (gate)
+        {
+            if (!transfers.TryGetValue(transferId, out var transfer) || transfer.Status != "Awaiting approval")
+                return false;
+            transfer.Status = "Awaiting stream";
+            transfer.IsStreamActive = true;
+            transfer.Summary = $"Accepted {transfer.Name}. Preparing the receive stream.";
+        }
+        PublishSnapshot("Receive request accepted.", "Inbound transfer active", "Receiving the approved files.");
+        _ = Task.Run(() => ReceiveTransferFromPeerAsync(transferId));
+        return true;
+    }
+
+    public async Task DeclineIncomingTransferAsync(string transferId, CancellationToken cancellationToken = default)
+    {
+        RuntimeTransferState transfer;
+        RuntimePeerState peer;
+        lock (gate)
+        {
+            if (!transfers.TryGetValue(transferId, out transfer!) || transfer.Status != "Awaiting approval") return;
+            transfer.Status = "Declined";
+            transfer.Summary = "You declined this receive request. No files were received.";
+            transfer.CompletedAtUtc = DateTimeOffset.UtcNow;
+            if (!peers.TryGetValue(transfer.PeerId, out peer!)) return;
+        }
+        PublishSnapshot("Receive request declined.", "Discovery and registration live", "No files were received.");
+        Channel? channel = null;
+        try
+        {
+            var profile = localProfile ?? throw new InvalidOperationException("The local service is unavailable.");
+            var client = peer.ActiveSecureSessionClient;
+            if (client is null)
+            {
+                var certificate = peer.RemoteCertificatePem ?? throw new InvalidOperationException("The sender is no longer connected.");
+                channel = new Channel($"{peer.Address}:{peer.TransferPort}", new SslCredentials(certificate));
+                await channel.ConnectAsync(DateTime.UtcNow.AddSeconds(5));
+                client = new Warp.WarpClient(channel);
+            }
+            await client.CancelTransferOpRequestAsync(new OpInfo
+            {
+                Ident = profile.ServiceId,
+                ReadableName = profile.HostName,
+                Timestamp = transfer.OpTimestamp
+            }, deadline: DateTime.UtcNow.AddSeconds(5), cancellationToken: cancellationToken);
+            RuntimeLog.Write($"Receive request declined and sender notified: {transferId}.");
+        }
+        catch (Exception ex)
+        {
+            RuntimeLog.Write($"Receive request {transferId} remains declined; could not notify sender: {ex}");
+            lock (gate) transfer.Summary = "Declined locally. The sender could not be notified.";
+            PublishSnapshot("Receive request declined; sender unavailable.", "Discovery and registration live", "No files were received.");
+        }
+        finally
+        {
+            if (channel is not null) await channel.ShutdownAsync();
+        }
     }
 
     internal void HandleRemoteTransferStop(StopInfo request)
@@ -531,7 +608,7 @@ public sealed class WarpinatorRuntime : IDisposable
 
         lock (gate)
         {
-            if (!transfers.TryGetValue(transferKey, out transferState!))
+            if (!transfers.TryGetValue(transferKey, out transferState!) || transferState.IsInbound)
             {
                 throw new RpcException(new Status(StatusCode.NotFound, "The requested outbound transfer was not found."));
             }
@@ -1094,7 +1171,8 @@ public sealed class WarpinatorRuntime : IDisposable
 
         lock (gate)
         {
-            if (!transfers.TryGetValue(transferKey, out transferState!) || !peers.TryGetValue(transferState.PeerId, out peerState!))
+            if (!transfers.TryGetValue(transferKey, out transferState!) || !transferState.IsStreamActive
+                || !peers.TryGetValue(transferState.PeerId, out peerState!))
             {
                 return;
             }
@@ -1417,10 +1495,15 @@ public sealed class WarpinatorRuntime : IDisposable
         {
             var profile = localProfile;
             var transferSnapshots = transfers.Values
+                .Where(transfer => transfer.Status == "Awaiting approval")
+                .Concat(transfers.Values.Where(transfer => transfer.Status != "Awaiting approval")
+                    .OrderByDescending(transfer => transfer.StartedAtUtc).Take(8))
                 .OrderByDescending(transfer => transfer.StartedAtUtc)
-                .Take(8)
                 .Select(transfer => new WarpinatorRuntimeTransfer
                 {
+                    Id = transfer.Id,
+                    RequiresApproval = transfer.Status == "Awaiting approval",
+                    ItemSummary = $"{transfer.TotalCount} item(s) · {FormatSize(transfer.TotalSize)}",
                     Name = transfer.Name,
                     Peer = string.IsNullOrWhiteSpace(transfer.PeerDisplayName) ? transfer.PeerId : transfer.PeerDisplayName,
                     Direction = transfer.IsInbound ? "Receiving" : "Sending",
@@ -1438,6 +1521,7 @@ public sealed class WarpinatorRuntime : IDisposable
 
             snapshot = new WarpinatorRuntimeSnapshot
             {
+                Revision = ++snapshotRevision,
                 IsRunning = started,
                 IsSearching = Volatile.Read(ref searchInProgress) != 0,
                 StatusMessage = statusMessage,
@@ -1587,6 +1671,9 @@ public sealed class WarpinatorRuntime : IDisposable
     {
         return !string.Equals(transfer.Status, "Completed", StringComparison.OrdinalIgnoreCase)
             && !string.Equals(transfer.Status, "Failed", StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(transfer.Status, "Awaiting approval", StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(transfer.Status, "Declined", StringComparison.OrdinalIgnoreCase)
+            && !transfer.Status.StartsWith("Stopped", StringComparison.OrdinalIgnoreCase)
             && !string.Equals(transfer.Status, "Cancelled", StringComparison.OrdinalIgnoreCase);
     }
 

@@ -1,0 +1,36 @@
+<Window x:Class="WarpinatorWinClient.App.ReceiveApprovalWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Receive files" Width="520" SizeToContent="Height" ResizeMode="NoResize"
+        WindowStartupLocation="CenterOwner" ShowInTaskbar="False" Background="#FF0A141C">
+    <Grid Margin="28">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+        <StackPanel>
+            <TextBlock FontSize="26" FontWeight="SemiBold" Foreground="#FFF4FCFF" Text="Receive files?" />
+            <TextBlock x:Name="SenderText" Margin="0,10,0,0" FontSize="14" TextWrapping="Wrap"
+                       Foreground="#A8C1D2DF" />
+        </StackPanel>
+        <StackPanel Grid.Row="1" Margin="0,26,0,0">
+            <TextBlock x:Name="FileNameText" FontSize="18" FontWeight="SemiBold" Foreground="#FFF4FCFF"
+                       TextWrapping="Wrap" TextTrimming="CharacterEllipsis" MaxHeight="72" />
+            <TextBlock x:Name="ItemSummaryText" Margin="0,10,0,0" FontSize="13" Foreground="#FF7AF9EE" />
+        </StackPanel>
+        <StackPanel Grid.Row="2" Margin="0,24,0,0">
+            <TextBlock FontSize="12" Foreground="#829CACBC" Text="Save to" />
+            <TextBlock x:Name="SaveFolderText" Margin="0,8,0,0" FontSize="13" TextWrapping="Wrap"
+                       TextTrimming="CharacterEllipsis" MaxHeight="54" Foreground="#C1D7E3EB" />
+        </StackPanel>
+        <TextBlock Grid.Row="3" Margin="0,22,0,0" FontSize="12" Foreground="#829CACBC"
+                   Text="Nothing is saved until you accept." />
+        <StackPanel Grid.Row="4" Margin="0,28,0,0" Orientation="Horizontal" HorizontalAlignment="Right">
+            <Button Margin="0,0,12,0" Style="{StaticResource QuietButtonStyle}" Content="Decline" IsCancel="True" IsDefault="True" />
+            <Button x:Name="AcceptReceiveButton" Style="{StaticResource ActionButtonStyle}" Content="Accept" Click="AcceptClicked" />
+        </StackPanel>
+    </Grid>
+</Window>

@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Require approval for incoming transfers by default, with sender/file/destination details and Accept/Decline actions; closing or cancelling the dialog declines without receiving files
+- Add Settings with a persistent Yes/No receive-approval preference; automatic receiving applies only to new requests
+- Handle duplicate, retried, queued, and withdrawn receive requests; add settings persistence and receive-approval TLS/gRPC regression coverage
 - Give transfer titles, status badges, reveal actions, and progress labels dedicated space; refine progress bars and scroll controls and keep activity accessible at smaller window sizes
 - Recover Linux's stale return connection after a Windows restart by refreshing registration only after the specific duplex timeout
 - Fix false receive failures when Linux advertises allocated disk space instead of exact file bytes; validate clean stream completion and item counts, and finish progress at the actual received size

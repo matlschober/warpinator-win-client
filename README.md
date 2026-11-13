@@ -10,7 +10,8 @@ Current status:
 - Receive completion follows Warpinator's stream status and item count; advertised sizes can include disk allocation overhead
 - Peer discovery, registration, secure session maintenance, send, and receive are implemented
 - The current UI supports progress, ETA, drag-and-drop sending, and revealing received files in Explorer
-- Folder transfer, queue depth, richer approvals, and notifications are still planned
+- Receive approval is enabled by default and configurable in Settings
+- Folder transfer, queue depth, and notifications are still planned
 
 ## Features
 
@@ -20,6 +21,8 @@ Current status:
 - Recover a stale Linux return connection after a Windows restart with a targeted registration refresh
 - Send files from Windows to Linux
 - Receive files from Linux to Windows
+- Accept or decline incoming transfers before any files are received
+- Configure **Settings → Show receive approval → Yes / No**; changes are saved and apply to new requests
 - Show live transfer progress and estimated time remaining
 - Drag and drop files into the app to send them
 - Reveal completed received files in Windows Explorer
@@ -46,6 +49,10 @@ dotnet build .\WarpinatorWinClient.sln
 ```powershell
 dotnet run --project .\WarpinatorWinClient.App\WarpinatorWinClient.App.csproj
 ```
+
+Incoming transfers ask for approval by default. The dialog shows the sender, name, item count, advertised size, and save folder. **Decline**, Escape, or closing the dialog rejects the request and notifies the sender. If the sender cancels first, the dialog closes automatically.
+
+Open **Settings** at the bottom of the sidebar to turn **Show receive approval** on or off. **No** enables automatic receiving for new requests; existing pending requests still require a decision. Preferences persist in `%LOCALAPPDATA%\WarpinatorWinClient\settings.json`.
 
 Run the isolated TLS/gRPC receive regression checks (no Linux peer required):
 

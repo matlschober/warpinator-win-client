@@ -2,6 +2,12 @@ namespace WarpinatorWinClient.App.Interop;
 
 public sealed class WarpinatorRuntimeTransfer
 {
+    public string Id { get; init; } = string.Empty;
+
+    public bool RequiresApproval { get; init; }
+
+    public string ItemSummary { get; init; } = string.Empty;
+
     public required string Name { get; init; }
 
     public required string Peer { get; init; }

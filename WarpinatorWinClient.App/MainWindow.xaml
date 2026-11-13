@@ -263,42 +263,46 @@
                             </StackPanel>
                         </Grid>
 
-                        <StackPanel Grid.Row="2" Margin="0,30,0,0">
-                            <DockPanel>
-                                <Button x:Name="SearchPeersButton" DockPanel.Dock="Right" HorizontalAlignment="Right"
-                                        Style="{StaticResource QuietButtonStyle}" Padding="12,8"
-                                        Click="SearchPeersClicked" Content="{Binding SearchButtonText}"
-                                        IsEnabled="{Binding CanSearch}" ToolTip="Search for nearby Warpinator devices" />
-                                <TextBlock Style="{StaticResource LabelStyle}" VerticalAlignment="Center" Text="Devices" />
-                            </DockPanel>
-                            <TextBlock Margin="0,12,0,0" FontSize="14" TextWrapping="Wrap" Foreground="#FFE6FBFF" Text="{Binding TransferReadiness}" />
-                            <TextBlock Margin="0,8,0,0" FontSize="12" TextWrapping="Wrap" Foreground="#99B6C6D1" Text="{Binding StatusMessage}" />
-                            <Border Style="{StaticResource DividerStyle}" />
-                            <ItemsControl ItemsSource="{Binding Peers}">
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate DataType="{x:Type models:PeerSummary}">
-                                        <Border Margin="0,0,0,14" Padding="16,15" Background="#111A2A35" CornerRadius="20">
-                                            <StackPanel>
-                                                <DockPanel>
-                                                    <Border DockPanel.Dock="Right" Padding="10,5" Background="#1539E4F5" CornerRadius="12">
-                                                        <TextBlock FontSize="11" FontWeight="SemiBold" Foreground="#FFB7FEFF" Text="{Binding Availability}" />
-                                                    </Border>
-                                                    <TextBlock Margin="0,0,8,0" VerticalAlignment="Center" FontSize="17" FontWeight="SemiBold"
-                                                               Foreground="#FFF4FCFF" Text="{Binding DisplayName}" TextTrimming="CharacterEllipsis"
-                                                               ToolTip="{Binding DisplayName}" />
-                                                </DockPanel>
-                                                <TextBlock Margin="0,6,0,0" FontSize="12" Foreground="#99B6C6D1" Text="{Binding Endpoint}" />
-                                                <TextBlock Margin="0,8,0,0" FontSize="12" LineHeight="18" TextWrapping="Wrap" Foreground="#AAC8D6E0" Text="{Binding Details}" />
-                                            </StackPanel>
-                                        </Border>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
-                        </StackPanel>
+                        <ScrollViewer Grid.Row="2" Margin="0,30,0,20" Style="{StaticResource WorkspaceScrollViewerStyle}">
+                            <StackPanel>
+                                <DockPanel>
+                                    <Button x:Name="SearchPeersButton" DockPanel.Dock="Right" HorizontalAlignment="Right"
+                                            Style="{StaticResource QuietButtonStyle}" Padding="12,8"
+                                            Click="SearchPeersClicked" Content="{Binding SearchButtonText}"
+                                            IsEnabled="{Binding CanSearch}" ToolTip="Search for nearby Warpinator devices" />
+                                    <TextBlock Style="{StaticResource LabelStyle}" VerticalAlignment="Center" Text="Devices" />
+                                </DockPanel>
+                                <TextBlock Margin="0,12,0,0" FontSize="14" TextWrapping="Wrap" Foreground="#FFE6FBFF" Text="{Binding TransferReadiness}" />
+                                <TextBlock Margin="0,8,0,0" FontSize="12" TextWrapping="Wrap" Foreground="#99B6C6D1" Text="{Binding StatusMessage}" />
+                                <Border Style="{StaticResource DividerStyle}" />
+                                <ItemsControl ItemsSource="{Binding Peers}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate DataType="{x:Type models:PeerSummary}">
+                                            <Border Margin="0,0,0,14" Padding="16,15" Background="#111A2A35" CornerRadius="20">
+                                                <StackPanel>
+                                                    <DockPanel>
+                                                        <Border DockPanel.Dock="Right" Padding="10,5" Background="#1539E4F5" CornerRadius="12">
+                                                            <TextBlock FontSize="11" FontWeight="SemiBold" Foreground="#FFB7FEFF" Text="{Binding Availability}" />
+                                                        </Border>
+                                                        <TextBlock Margin="0,0,8,0" VerticalAlignment="Center" FontSize="17" FontWeight="SemiBold"
+                                                                   Foreground="#FFF4FCFF" Text="{Binding DisplayName}" TextTrimming="CharacterEllipsis"
+                                                                   ToolTip="{Binding DisplayName}" />
+                                                    </DockPanel>
+                                                    <TextBlock Margin="0,6,0,0" FontSize="12" Foreground="#99B6C6D1" Text="{Binding Endpoint}" />
+                                                    <TextBlock Margin="0,8,0,0" FontSize="12" LineHeight="18" TextWrapping="Wrap" Foreground="#AAC8D6E0" Text="{Binding Details}" />
+                                                </StackPanel>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </ScrollViewer>
 
                         <StackPanel Grid.Row="3">
                             <TextBlock Style="{StaticResource LabelStyle}" Text="Receive folder" />
                             <TextBlock Margin="0,10,0,0" FontSize="13" LineHeight="20" TextWrapping="Wrap" Foreground="#C6D9E4EC" Text="{Binding SaveFolderSummary}" />
+                            <Button x:Name="SettingsButton" Margin="0,18,0,0" HorizontalAlignment="Left" Padding="12,8"
+                                    Style="{StaticResource QuietButtonStyle}" Content="Settings" Click="SettingsClicked" />
                         </StackPanel>
                     </Grid>
                 </Border>

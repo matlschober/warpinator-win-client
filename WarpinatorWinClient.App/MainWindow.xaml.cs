@@ -16,6 +16,13 @@ public partial class MainWindow : Window
 {
     private readonly MainViewModel viewModel;
     private readonly WarpinatorRuntime runtime;
+    private WarpinatorRuntimeSnapshot? latestSnapshot;
+    private readonly HashSet<string> handledApprovalIds = new(StringComparer.Ordinal);
+    private ReceiveApprovalWindow? approvalWindow;
+    private string? approvalTransferId;
+    private bool showingApproval;
+    private bool showingSettings;
+    private bool closing;
 
     public MainWindow()
     {
@@ -26,6 +33,50 @@ public partial class MainWindow : Window
         DataContext = viewModel;
         Loaded += MainWindowLoaded;
         Closed += MainWindowClosed;
+        Closing += (_, _) => closing = true;
+    }
+
+    private void SettingsClicked(object sender, RoutedEventArgs e)
+    {
+        showingSettings = true;
+        try
+        {
+            new SettingsWindow(this, ((App)Application.Current).CurrentSettings.RequireReceiveApproval).ShowDialog();
+        }
+        finally
+        {
+            showingSettings = false;
+            ShowReceiveApprovals();
+        }
+    }
+
+    private async void ShowReceiveApprovals()
+    {
+        if (showingApproval || showingSettings || closing || !IsLoaded) return;
+        showingApproval = true;
+        try
+        {
+            while (!closing && !showingSettings)
+            {
+                var request = latestSnapshot?.Transfers.LastOrDefault(transfer => transfer.RequiresApproval
+                    && !handledApprovalIds.Contains(transfer.Id));
+                if (request is null) break;
+                approvalTransferId = request.Id;
+                approvalWindow = new ReceiveApprovalWindow(this, request, latestSnapshot!.SaveFolderSummary);
+                var accepted = approvalWindow.ShowDialog() == true;
+                approvalWindow = null;
+                approvalTransferId = null;
+                handledApprovalIds.Add(request.Id);
+                if (accepted) runtime.ApproveIncomingTransfer(request.Id);
+                else await runtime.DeclineIncomingTransferAsync(request.Id);
+            }
+        }
+        finally
+        {
+            approvalWindow = null;
+            approvalTransferId = null;
+            showingApproval = false;
+        }
     }
 
     private async void MainWindowLoaded(object sender, RoutedEventArgs e)
@@ -117,7 +168,17 @@ public partial class MainWindow : Window
     {
         if (!Dispatcher.HasShutdownStarted)
         {
-            _ = Dispatcher.InvokeAsync(() => viewModel.ApplyRuntimeSnapshot(snapshot));
+            _ = Dispatcher.InvokeAsync(() =>
+            {
+                if (latestSnapshot is not null && snapshot.Revision < latestSnapshot.Revision) return;
+                latestSnapshot = snapshot;
+                handledApprovalIds.RemoveWhere(id => !snapshot.Transfers.Any(transfer => transfer.Id == id && transfer.RequiresApproval));
+                viewModel.ApplyRuntimeSnapshot(snapshot);
+                if (approvalTransferId is not null && !snapshot.Transfers.Any(transfer =>
+                    transfer.Id == approvalTransferId && transfer.RequiresApproval))
+                    approvalWindow?.Dismiss();
+                ShowReceiveApprovals();
+            });
         }
     }
 

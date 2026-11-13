@@ -95,6 +95,8 @@ Completed:
 - Added targeted registration recovery after Linux's return-connection timeout following a Windows restart; normal discovery still avoids manual registration, and regression checks cover the timeout/recovery path
 - Verified the real FLAC receive completes with 1,295,651 payload bytes against 1,298,432 advertised bytes, with the same SHA256 as the earlier copy; verified automatic reconnection after restarting Windows without restarting Linux; all twelve regression checks pass and the Release build has zero warnings/errors
 - Refined transfer spacing with dedicated title/action columns, compact aligned status badges, rounded progress bars, long-name tooltips, and a scrollable workspace; verified idle and active layouts at 1080, 1260, and 1600 pixel widths
+- Added receive approval enabled by default, a native Accept/Decline dialog, sender cancellation handling, and a persistent Settings → Show receive approval → Yes/No preference; no file stream opens before approval, and disabling approval affects new requests only
+- Verified approval, decline, close, retry, sender withdrawal, and automatic receive through TLS/gRPC and Windows UI Automation; both receive-approval choices survive a complete process restart, the running app is left at Yes, and all twenty isolated regression checks pass
 
 In progress:
 
@@ -106,7 +108,7 @@ Next milestones:
 1. Verify a real Windows-to-Linux file lands successfully on the configured Linux save side
 2. Expand outbound sending from a single file to folders and multi-file selections
 3. Expand from multi-file sequential sending into proper folder and queue UX
-4. Add clearer receive approvals and optional transfer notifications
+4. Add optional transfer notifications
 5. Add automated tests around certificate handling, peer parsing, and transfer metadata
 
 ## Scope Guardrails

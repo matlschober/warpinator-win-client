@@ -82,6 +82,7 @@ Areas we expect to keep dependency-free:
 
 ## Change Log
 
+- 2026-11-13: Added receive approval, native WPF settings/confirmation dialogs, and per-user JSON settings persistence with built-in System.Text.Json; no NuGet dependencies added
 - 2026-11-13: Refined transfer layouts, progress bars, and scrolling with native WPF templates; no dependencies added
 - 2026-11-13: Added targeted duplex-timeout registration recovery using the existing gRPC registration service; dependency set unchanged
 - 2026-11-13: Corrected receive completion for Linux's allocated-size metadata and added item-count and stream-error regression coverage without adding dependencies

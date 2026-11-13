@@ -1,7 +1,9 @@
 namespace WarpinatorWinClient.Core.Configuration;
 
-public sealed class AppSettings
+public sealed record AppSettings
 {
+    public bool RequireReceiveApproval { get; init; } = true;
+
     public string DisplayName { get; init; } = Environment.MachineName;
 
     public string GroupCode { get; init; } = Protocol.WarpinatorProtocolDefaults.DefaultGroupCode;

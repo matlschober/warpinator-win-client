@@ -5,6 +5,8 @@ namespace WarpinatorWinClient.App.Interop;
 
 public sealed class WarpinatorRuntimeSnapshot
 {
+    public long Revision { get; init; }
+
     public bool IsRunning { get; init; }
 
     public bool IsSearching { get; init; }

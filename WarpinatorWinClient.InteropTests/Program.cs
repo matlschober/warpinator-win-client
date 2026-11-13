@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.IO;
 using System.Reflection;
 using System.Security.Cryptography;
+using System.Text.Json;
 using Google.Protobuf;
 using Grpc.Core;
 using Makaretu.Dns;
@@ -18,7 +19,7 @@ if (args.Contains("--discover"))
 // request callbacks, protobuf operation identities, and writes to an isolated folder.
 // Private discovery entry points are invoked to avoid depending on LAN multicast.
 var saveFolder = Path.Combine(Path.GetTempPath(), "warpinator-interop-" + Guid.NewGuid().ToString("N"));
-var settings = new AppSettings { SaveFolderPath = saveFolder };
+var settings = new AppSettings { SaveFolderPath = saveFolder, RequireReceiveApproval = false };
 var profile = LocalMachineProfile.Create(settings);
 var certificates = new WarpCertificateManager(profile);
 var credentials = new SslServerCredentials(new[]
@@ -124,6 +125,83 @@ try
         new SslCredentials(certificates.PublicCertificatePem));
     var windows = new Warp.WarpClient(windowsChannel);
     var payload = RandomNumberGenerator.GetBytes(2 * 1024 * 1024 + 123);
+
+    Require(new AppSettings().RequireReceiveApproval, "Receive approval must be enabled by default.");
+    var storePath = Path.Combine(saveFolder, "settings.json");
+    var store = new JsonAppSettingsStore(storePath);
+    Require((await store.LoadAsync(CancellationToken.None)).RequireReceiveApproval, "Missing settings must require approval.");
+    await store.SaveAsync(settings, CancellationToken.None);
+    var reloaded = await new JsonAppSettingsStore(storePath).LoadAsync(CancellationToken.None);
+    Require(!reloaded.RequireReceiveApproval && reloaded.SaveFolderPath == saveFolder, "Receive preference was not persisted.");
+    await store.SaveAsync(settings with { RequireReceiveApproval = true }, CancellationToken.None);
+    Require((await store.LoadAsync(CancellationToken.None)).RequireReceiveApproval, "Approval could not be re-enabled persistently.");
+    File.WriteAllText(storePath, "{}");
+    Require((await store.LoadAsync(CancellationToken.None)).RequireReceiveApproval, "Older settings must require approval.");
+    File.WriteAllText(storePath, "{invalid json}");
+    try { await store.LoadAsync(CancellationToken.None); throw new InvalidOperationException("Malformed settings were accepted."); }
+    catch (JsonException) { }
+    Console.WriteLine("PASS: approval defaults on, persists both settings, and invalid settings never enable automatic receiving.");
+
+    runtime.SetReceiveApprovalRequired(true);
+    var pendingCompletion = new TaskCompletionSource<WarpinatorRuntimeTransfer>(TaskCreationOptions.RunContinuationsAsynchronously);
+    results["approval.bin"] = pendingCompletion;
+    var originalPath = Path.Combine(saveFolder, "approval.bin");
+    File.WriteAllText(originalPath, "existing content");
+    await OfferIncoming("approval.bin", 66781777600, payload, payload.Length);
+    await OfferIncoming("approval.bin", 66781777600, payload, payload.Length);
+    await Task.Delay(150);
+    var pending = latestSnapshot!.Transfers.Single(transfer => transfer.Name == "approval.bin");
+    Require(pending.RequiresApproval && !pending.IsActive, "The offer did not wait for approval.");
+    Require(!remote.StartRequests.ContainsKey(66781777600), "A pending offer opened a stream.");
+    Require(File.ReadAllText(originalPath) == "existing content", "A pending offer modified an existing file.");
+    Require(runtime.ApproveIncomingTransfer(pending.Id), "The receive request could not be accepted.");
+    Require(!runtime.ApproveIncomingTransfer(pending.Id), "A receive request could be approved twice.");
+    Require((await pendingCompletion.Task.WaitAsync(TimeSpan.FromSeconds(15))).Status == "Completed", "Approved receive did not complete.");
+    Require(File.ReadAllBytes(originalPath).SequenceEqual(payload), "Approved receive changed the file bytes.");
+    Console.WriteLine("PASS: pending and duplicate offers perform no I/O; acceptance starts one stream and saves matching bytes.");
+
+    await OfferIncoming("declined.bin", 66781777601, payload, payload.Length);
+    var declined = latestSnapshot!.Transfers.Single(transfer => transfer.Name == "declined.bin");
+    await runtime.DeclineIncomingTransferAsync(declined.Id);
+    Require(remote.Cancellations.TryGetValue(66781777601, out var cancelIdent) && cancelIdent == profile.ServiceId,
+        "Decline did not notify the sender with the receiver ID and original timestamp.");
+    Require(!File.Exists(Path.Combine(saveFolder, "declined.bin")) && !remote.StartRequests.ContainsKey(66781777601),
+        "Declining an offer received file data.");
+    Require(!runtime.ApproveIncomingTransfer(declined.Id), "A declined offer could still be approved.");
+    Console.WriteLine("PASS: declining receives no bytes, creates no file, and sends Warpinator cancellation to the sender.");
+    await OfferIncoming("declined.bin", 66781777601, payload, payload.Length);
+    Require(latestSnapshot!.Transfers.Single(transfer => transfer.Name == "declined.bin").RequiresApproval,
+        "A sender retry of a declined operation did not request fresh approval.");
+    await runtime.DeclineIncomingTransferAsync(declined.Id);
+    Console.WriteLine("PASS: retrying a declined operation asks for approval again.");
+
+    await OfferIncoming("withdrawn.bin", 66781777602, payload, payload.Length);
+    var withdrawn = latestSnapshot!.Transfers.Single(transfer => transfer.Name == "withdrawn.bin");
+    await windows.CancelTransferOpRequestAsync(new OpInfo { Ident = remote.Id, Timestamp = 66781777602 });
+    Require(!runtime.ApproveIncomingTransfer(withdrawn.Id) && !File.Exists(Path.Combine(saveFolder, "withdrawn.bin")),
+        "A sender-cancelled offer could still be accepted.");
+    Console.WriteLine("PASS: sender cancellation withdraws a pending offer and prevents later approval.");
+
+    await OfferIncoming("still-pending.bin", 66781777603, payload, payload.Length);
+    var stillPending = latestSnapshot!.Transfers.Single(transfer => transfer.Name == "still-pending.bin");
+    runtime.SetReceiveApprovalRequired(false);
+    Require(!remote.StartRequests.ContainsKey(66781777603), "Disabling approval accepted an already pending offer.");
+    await runtime.DeclineIncomingTransferAsync(stillPending.Id);
+    Console.WriteLine("PASS: changing the preference applies to new requests and does not silently accept pending offers.");
+
+    runtime.SetReceiveApprovalRequired(true);
+    EventHandler<WarpinatorRuntimeSnapshot> approveImmediately = (_, snapshot) =>
+    {
+        foreach (var transfer in snapshot.Transfers.Where(transfer => transfer.Name == "fast-approval.bin" && transfer.RequiresApproval))
+            runtime.ApproveIncomingTransfer(transfer.Id);
+    };
+    runtime.SnapshotChanged += approveImmediately;
+    try { await Receive("fast-approval.bin", 66781777604, payload, payload.Length, "Completed"); }
+    finally { runtime.SnapshotChanged -= approveImmediately; }
+    Require(remote.StartRequests[66781777604] == 1, "An immediate approval opened more than one stream.");
+    runtime.SetReceiveApprovalRequired(false);
+    Console.WriteLine("PASS: approval during offer notification starts exactly one receive stream.");
+
     await Receive("single-file.bin", 66781777514, payload, payload.Length, "Completed");
     Require(SHA256.HashData(File.ReadAllBytes(Path.Combine(saveFolder, "single-file.bin")))
         .SequenceEqual(SHA256.HashData(payload)), "Received file content differs from the sender.");
@@ -196,11 +274,31 @@ try
     Require(remote.RegistrationRefreshed, "The peer's cached registration was not refreshed.");
     Console.WriteLine("PASS: a Linux-style stale-certificate duplex timeout triggers a targeted registration refresh and reconnects.");
 
+    runtime.SetReceiveApprovalRequired(true);
+    for (var index = 0; index < 10; index++)
+        await OfferIncoming($"pending-{index}.bin", 66781777700 + (ulong)index, new byte[] { 42 }, 1);
+    var queued = latestSnapshot!.Transfers.Where(transfer => transfer.RequiresApproval).ToArray();
+    Require(queued.Length == 10, "Pending offers were hidden by the recent-history limit.");
+    await runtime.StopAsync();
+    foreach (var request in queued)
+        Require(!runtime.ApproveIncomingTransfer(request.Id), "Stopping the service left an offer approvable.");
+    Require(!Directory.GetFiles(saveFolder, "pending-*.bin").Any(), "A queued offer wrote files during shutdown.");
+    Console.WriteLine("PASS: all pending requests remain visible beyond the history limit and shutdown cancels them without writing files.");
+
     async Task Receive(string name, ulong timestamp, byte[] bytes, int offeredSize, string expectedStatus,
         ulong offeredCount = 1, int fileType = 1)
     {
         var completion = new TaskCompletionSource<WarpinatorRuntimeTransfer>(TaskCreationOptions.RunContinuationsAsynchronously);
         results[name] = completion;
+        await OfferIncoming(name, timestamp, bytes, offeredSize, offeredCount, fileType);
+        var result = await completion.Task.WaitAsync(TimeSpan.FromSeconds(15));
+        Require(result.Status == expectedStatus, $"{name}: expected {expectedStatus}, got {result.Status}: {result.Summary}");
+        if (expectedStatus == "Completed")
+            Require(result.ProgressPercent == 100, $"{name}: completed transfer progress is not 100 percent.");
+    }
+
+    async Task OfferIncoming(string name, ulong timestamp, byte[] bytes, int offeredSize, ulong offeredCount = 1, int fileType = 1)
+    {
         remote.Offers[timestamp] = new Offer(profile.ServiceId, name, bytes, fileType);
         await windows.ProcessTransferOpRequestAsync(new TransferOpRequest
         {
@@ -211,10 +309,6 @@ try
             Count = offeredCount,
             TopDirBasenames = { name }
         }, deadline: DateTime.UtcNow.AddSeconds(10));
-        var result = await completion.Task.WaitAsync(TimeSpan.FromSeconds(15));
-        Require(result.Status == expectedStatus, $"{name}: expected {expectedStatus}, got {result.Status}: {result.Summary}");
-        if (expectedStatus == "Completed")
-            Require(result.ProgressPercent == 100, $"{name}: completed transfer progress is not 100 percent.");
     }
 }
 finally
@@ -275,6 +369,14 @@ sealed class SimulatedLinuxPeer : Warp.WarpBase
 {
     public string Id { get; } = "linux-interop-test";
     public ConcurrentDictionary<ulong, Offer> Offers { get; } = new();
+    public ConcurrentDictionary<ulong, int> StartRequests { get; } = new();
+    public ConcurrentDictionary<ulong, string> Cancellations { get; } = new();
+
+    public override Task<VoidType> CancelTransferOpRequest(OpInfo request, ServerCallContext context)
+    {
+        Cancellations[request.Timestamp] = request.Ident;
+        return Task.FromResult(new VoidType());
+    }
     public bool CompressionRequested { get; private set; }
     public bool RequireRegistrationRefresh { get; set; }
     public bool RegistrationRefreshed { get; set; }
@@ -290,6 +392,7 @@ sealed class SimulatedLinuxPeer : Warp.WarpBase
     public override Task<VoidType> Ping(LookupName request, ServerCallContext context) => Task.FromResult(new VoidType());
     public override async Task StartTransfer(OpInfo request, IServerStreamWriter<FileChunk> stream, ServerCallContext context)
     {
+        StartRequests.AddOrUpdate(request.Timestamp, 1, (_, count) => count + 1);
         if (!Offers.TryGetValue(request.Timestamp, out var offer) || request.Ident != offer.Receiver)
             throw new RpcException(new Status(StatusCode.Unknown, "'NoneType' object has no attribute 'file_send_cancellable'"));
         CompressionRequested |= request.UseCompression;
