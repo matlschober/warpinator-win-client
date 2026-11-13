@@ -26,6 +26,9 @@ jobs:
       - name: Build
         run: dotnet build .\WarpinatorWinClient.sln --configuration Release --no-restore
 
+      - name: Receive protocol regression checks
+        run: dotnet run --project .\WarpinatorWinClient.InteropTests\WarpinatorWinClient.InteropTests.csproj --configuration Release --no-build
+
       - name: Publish Windows x64
         run: dotnet publish .\WarpinatorWinClient.App\WarpinatorWinClient.App.csproj --configuration Release --runtime win-x64 --self-contained false --output .\publish\win-x64
 

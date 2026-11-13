@@ -20,7 +20,7 @@ public sealed class WarpinatorRuntime : IDisposable
     private readonly Dictionary<string, RuntimePeerState> peers = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, RuntimeTransferState> transfers = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, CancellationTokenSource> peerSessionTokens = new(StringComparer.OrdinalIgnoreCase);
-    private readonly AppSettings settings = new();
+    private readonly AppSettings settings;
 
     private LocalMachineProfile? localProfile;
     private WarpCertificateManager? certificateManager;
@@ -32,6 +32,15 @@ public sealed class WarpinatorRuntime : IDisposable
     private bool started;
 
     public event EventHandler<WarpinatorRuntimeSnapshot>? SnapshotChanged;
+
+    public WarpinatorRuntime() : this(new AppSettings())
+    {
+    }
+
+    public WarpinatorRuntime(AppSettings settings)
+    {
+        this.settings = settings;
+    }
 
     public async Task StartAsync(CancellationToken cancellationToken)
     {
@@ -618,7 +627,7 @@ public sealed class WarpinatorRuntime : IDisposable
 
             peerState.IsRegistering = true;
             peerState.Availability = "Registering";
-            peerState.Details = "Requesting remote certificate and announcing this Windows client.";
+            peerState.Details = "Requesting the certificate for the discovered peer.";
         }
         RuntimeLog.Write($"Attempting registration with {peerState.DisplayName} at {peerState.Address}:{peerState.AuthenticationPort}.");
         PublishSnapshot(
@@ -660,31 +669,18 @@ public sealed class WarpinatorRuntime : IDisposable
                 return;
             }
 
-            peerState.RemoteCertificatePem = remoteCertificatePem;
-
-            var serviceRegistration = await registrationClient.RegisterServiceAsync(
-                new ServiceRegistration
-                {
-                    ServiceId = localProfile.ServiceId,
-                    Ip = localProfile.Ipv4Address.ToString(),
-                    Port = (uint)localProfile.TransferPort,
-                    Hostname = localProfile.HostName,
-                    ApiVersion = (uint)localProfile.ApiVersion,
-                    AuthPort = (uint)localProfile.AuthenticationPort,
-                    Ipv6 = string.Empty
-                },
-                deadline: DateTime.UtcNow.AddSeconds(5));
-
+            // Discovery already announces this client to Linux. RegisterService is for
+            // manual connections; racing it against mDNS can create two RemoteMachine
+            // instances upstream, with transfer offers attached to the replaced instance.
             lock (gate)
             {
+                peerState.RemoteCertificatePem = remoteCertificatePem;
                 peerState.IsRegistering = false;
-                peerState.DisplayName = serviceRegistration.Hostname;
-                peerState.Hostname = serviceRegistration.Hostname;
                 peerState.Availability = "Registered";
-                peerState.Details = $"Certificate exchange succeeded. Linux peer acknowledged this client on auth {serviceRegistration.AuthPort}.";
+                peerState.Details = "Certificate exchange succeeded. Establishing the secure peer session.";
             }
 
-            RuntimeLog.Write($"Registration succeeded with {peerState.DisplayName}. Remote returned service id {serviceRegistration.ServiceId} host {serviceRegistration.Hostname}.");
+            RuntimeLog.Write($"Certificate exchange succeeded with discovered peer {peerState.DisplayName} ({peerId}); reciprocal discovery uses mDNS only.");
             PublishSnapshot(
                 $"Registration succeeded with {peerState.DisplayName}.",
                 "Discovery and registration live",
@@ -949,13 +945,16 @@ public sealed class WarpinatorRuntime : IDisposable
                     await channel.ConnectAsync(DateTime.UtcNow.AddSeconds(5));
 
                     var client = new Warp.WarpClient(channel);
+                    RuntimeLog.Write($"Requesting StartTransfer from {peerState.Id}: receiver={localProfile.ServiceId}, timestamp={transferState.OpTimestamp}, attempt={attempt}.");
                     using var call = client.StartTransfer(
                         new OpInfo
                         {
                             Ident = localProfile.ServiceId,
                             Timestamp = transferState.OpTimestamp,
                             ReadableName = localProfile.HostName,
-                            UseCompression = transferState.UseCompression
+                            // The receive writer consumes raw bytes; no chunk decompressor
+                            // is implemented, even if the sender offered compression.
+                            UseCompression = false
                         },
                         deadline: DateTime.UtcNow.AddMinutes(5));
 
@@ -992,6 +991,13 @@ public sealed class WarpinatorRuntime : IDisposable
                                 "Inbound transfer active",
                                 "The Windows client is now pulling file chunks from the Linux peer.");
                         }
+                    }
+
+                    if ((!sawAnyChunk && transferState.TotalCount > 0)
+                        || transferState.BytesReceived != transferState.TotalSize)
+                    {
+                        throw new InvalidOperationException(
+                            $"The sender ended the stream after {transferState.BytesReceived} of {transferState.TotalSize} bytes.");
                     }
 
                     receiveCompleted = true;

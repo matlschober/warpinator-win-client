@@ -6,7 +6,8 @@ A lightweight Windows 11 desktop client that can discover Linux Warpinator peers
 
 Current status:
 
-- Windows <-> Linux file transfer works on a real LAN
+- Bidirectional file transfer is implemented; Linux-to-Windows transfers have previously succeeded on a real LAN
+- A receive compatibility fix for duplicate Linux peer registration is awaiting a fresh live transfer check
 - Peer discovery, registration, secure session maintenance, send, and receive are implemented
 - The current UI supports progress, ETA, drag-and-drop sending, and revealing received files in Explorer
 - Folder transfer, queue depth, richer approvals, and notifications are still planned
@@ -39,6 +40,12 @@ dotnet build .\WarpinatorWinClient.sln
 
 ```powershell
 dotnet run --project .\WarpinatorWinClient.App\WarpinatorWinClient.App.csproj
+```
+
+Run the isolated TLS/gRPC receive regression checks (no Linux peer required):
+
+```powershell
+dotnet run --project .\WarpinatorWinClient.InteropTests\WarpinatorWinClient.InteropTests.csproj -c Release
 ```
 
 ## Publish

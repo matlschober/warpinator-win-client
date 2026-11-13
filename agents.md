@@ -49,7 +49,7 @@ Why this direction:
 
 ## Project Status
 
-Current phase: bidirectional single-file transfer paths implemented, Windows-to-Linux live send pending verification
+Current phase: bidirectional file transfer paths implemented; receive compatibility fix and Windows-to-Linux live send pending verification
 
 Completed:
 
@@ -89,6 +89,7 @@ Completed:
 
 In progress:
 
+- Rechecking Linux-to-Windows receive after fixing simultaneous manual/mDNS registration, declining unsupported compression, and rejecting incomplete streams; isolated TLS/gRPC regression checks pass
 - Verifying the first real Windows-to-Linux file send against the live Linux machine
 - Verifying the polished consumer-facing shell, Explorer reveal action, and updated transfer affordances against live file movement
 
