@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Give transfer titles, status badges, reveal actions, and progress labels dedicated space; refine progress bars and scroll controls and keep activity accessible at smaller window sizes
 - Recover Linux's stale return connection after a Windows restart by refreshing registration only after the specific duplex timeout
 - Fix false receive failures when Linux advertises allocated disk space instead of exact file bytes; validate clean stream completion and item counts, and finish progress at the actual received size
 - Add regression coverage for the reported FLAC size mismatch, allocation overhead, missing items, and interrupted streams

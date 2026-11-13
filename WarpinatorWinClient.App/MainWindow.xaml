@@ -31,6 +31,100 @@
             <Setter Property="FontWeight" Value="SemiBold" />
             <Setter Property="Foreground" Value="#889FB4C5" />
         </Style>
+        <Style x:Key="StatusBadgeStyle" TargetType="Border">
+            <Setter Property="Padding" Value="12,6" />
+            <Setter Property="CornerRadius" Value="10" />
+            <Setter Property="Background" Value="#1236D4E8" />
+            <Setter Property="HorizontalAlignment" Value="Right" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style x:Key="TransferProgressStyle" TargetType="ProgressBar">
+            <Setter Property="Height" Value="6" />
+            <Setter Property="Foreground" Value="#FF47E0D1" />
+            <Setter Property="Background" Value="#1831D0E6" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ProgressBar">
+                        <Grid x:Name="PART_Track" ClipToBounds="True">
+                            <Border Background="{TemplateBinding Background}" CornerRadius="3" />
+                            <Border x:Name="PART_Indicator" HorizontalAlignment="Left"
+                                    Background="{TemplateBinding Foreground}" CornerRadius="3" />
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="WorkspaceScrollBarStyle" TargetType="ScrollBar">
+            <Setter Property="Width" Value="6" />
+            <Setter Property="MinWidth" Value="0" />
+            <Setter Property="MaxWidth" Value="6" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ScrollBar">
+                        <Track x:Name="PART_Track" Width="6" IsDirectionReversed="True" Orientation="Vertical">
+                            <Track.DecreaseRepeatButton>
+                                <RepeatButton Command="{x:Static ScrollBar.PageUpCommand}" Focusable="False">
+                                    <RepeatButton.Template>
+                                        <ControlTemplate TargetType="RepeatButton"><Border Background="Transparent" /></ControlTemplate>
+                                    </RepeatButton.Template>
+                                </RepeatButton>
+                            </Track.DecreaseRepeatButton>
+                            <Track.Thumb>
+                                <Thumb Width="6" MinWidth="0" MinHeight="28">
+                                    <Thumb.Template>
+                                        <ControlTemplate TargetType="Thumb">
+                                            <Border x:Name="ThumbChrome" Background="#3C8CA7B5" CornerRadius="3" />
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Setter TargetName="ThumbChrome" Property="Background" Value="#708CA7B5" />
+                                                </Trigger>
+                                                <Trigger Property="IsDragging" Value="True">
+                                                    <Setter TargetName="ThumbChrome" Property="Background" Value="#FF47E0D1" />
+                                                </Trigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </Thumb.Template>
+                                </Thumb>
+                            </Track.Thumb>
+                            <Track.IncreaseRepeatButton>
+                                <RepeatButton Command="{x:Static ScrollBar.PageDownCommand}" Focusable="False">
+                                    <RepeatButton.Template>
+                                        <ControlTemplate TargetType="RepeatButton"><Border Background="Transparent" /></ControlTemplate>
+                                    </RepeatButton.Template>
+                                </RepeatButton>
+                            </Track.IncreaseRepeatButton>
+                        </Track>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="WorkspaceScrollViewerStyle" TargetType="ScrollViewer">
+            <Setter Property="VerticalScrollBarVisibility" Value="Auto" />
+            <Setter Property="HorizontalScrollBarVisibility" Value="Disabled" />
+            <Setter Property="PanningMode" Value="VerticalOnly" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ScrollViewer">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <ScrollContentPresenter x:Name="PART_ScrollContentPresenter"
+                                                    Content="{TemplateBinding Content}" ContentTemplate="{TemplateBinding ContentTemplate}"
+                                                    CanContentScroll="{TemplateBinding CanContentScroll}" />
+                            <ScrollBar x:Name="PART_VerticalScrollBar" Grid.Column="1" Margin="0,24,8,24"
+                                       Style="{StaticResource WorkspaceScrollBarStyle}" Orientation="Vertical"
+                                       Minimum="0" Maximum="{TemplateBinding ScrollableHeight}"
+                                       ViewportSize="{TemplateBinding ViewportHeight}" Value="{TemplateBinding VerticalOffset}"
+                                       Visibility="{TemplateBinding ComputedVerticalScrollBarVisibility}" />
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
         <Style x:Key="ActionButtonStyle" TargetType="Button">
             <Setter Property="Padding" Value="18,11" />
             <Setter Property="Background" Value="{StaticResource AccentBrush}" />
@@ -209,137 +303,166 @@
                     </Grid>
                 </Border>
 
-                <Grid Grid.Column="1" Margin="34,30,34,30">
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="*" />
-                    </Grid.RowDefinitions>
+                <ScrollViewer x:Name="WorkspaceScrollViewer" Grid.Column="1" Style="{StaticResource WorkspaceScrollViewerStyle}">
+                    <Grid Margin="34,30,34,30">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
 
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
-                        <StackPanel>
-                            <TextBlock FontFamily="Segoe UI Variable Display" FontSize="36" FontWeight="SemiBold" Foreground="#FFF4FCFF" Text="Transfer deck" />
-                            <TextBlock Margin="0,8,0,0" FontSize="14" Foreground="#9DB8C7D2" Text="Send, watch, and reopen files from a single surface." />
-                        </StackPanel>
-                        <StackPanel Grid.Column="1" Orientation="Horizontal">
-                            <Border Padding="12,9" Margin="0,0,12,0" Background="#1237D8EA" CornerRadius="16">
-                                <TextBlock FontSize="12" FontWeight="SemiBold" Foreground="#FFBFFDFF" Text="{Binding ConnectionSummary}" />
-                            </Border>
-                            <Button Style="{StaticResource ActionButtonStyle}" Click="SendFileClicked" Content="Send File" />
-                        </StackPanel>
-                    </Grid>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Margin="0,0,24,0">
+                                <TextBlock FontFamily="Segoe UI Variable Display" FontSize="36" FontWeight="SemiBold" Foreground="#FFF4FCFF" Text="Transfer deck" />
+                                <TextBlock Margin="0,8,0,0" FontSize="14" TextWrapping="Wrap" Foreground="#9DB8C7D2" Text="Send files and follow their progress." />
+                            </StackPanel>
+                            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                <Border Style="{StaticResource StatusBadgeStyle}" Margin="0,0,16,0">
+                                    <TextBlock FontSize="12" FontWeight="SemiBold" Foreground="#FFBFFDFF" Text="{Binding ConnectionSummary}" />
+                                </Border>
+                                <Button Style="{StaticResource ActionButtonStyle}" Click="SendFileClicked" Content="Send File" />
+                            </StackPanel>
+                        </Grid>
 
-                    <Grid Grid.Row="1" Margin="0,28,0,0">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="1.02*" />
-                            <ColumnDefinition Width="28" />
-                            <ColumnDefinition Width="1.28*" />
-                        </Grid.ColumnDefinitions>
+                        <Grid Grid.Row="1" Margin="0,28,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="1.02*" />
+                                <ColumnDefinition Width="28" />
+                                <ColumnDefinition Width="1.28*" />
+                            </Grid.ColumnDefinitions>
 
-                        <Border Style="{StaticResource DropStageStyle}"
-                                AllowDrop="True"
-                                DragEnter="SendStageDragEnter"
-                                DragOver="SendStageDragOver"
-                                DragLeave="SendStageDragLeave"
-                                Drop="SendStageDrop">
-                            <Grid Margin="26">
-                                <Grid.RowDefinitions>
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="*" />
-                                    <RowDefinition Height="Auto" />
-                                </Grid.RowDefinitions>
-                                <StackPanel>
-                                    <TextBlock Style="{StaticResource LabelStyle}" Text="Outbound lane" />
-                                    <TextBlock Margin="0,12,0,0" FontFamily="Segoe UI Variable Display" FontSize="30" FontWeight="SemiBold" Foreground="#FFF4FCFF" Text="Drop files to launch" />
-                                    <TextBlock Margin="0,10,0,0" FontSize="14" LineHeight="22" TextWrapping="Wrap" Foreground="#A9C3D1DC" Text="Drag files from Explorer into this lane or choose them manually. Transfers begin immediately on the connected Linux device." />
-                                </StackPanel>
-                                <StackPanel Grid.Row="1" VerticalAlignment="Center">
-                                    <TextBlock FontSize="13" FontWeight="SemiBold" Foreground="#FF7FF9EE" Text="Drag and drop is active" />
-                                    <TextBlock Margin="0,8,0,0" FontSize="13" Foreground="#8FB7C9D7" Text="Multi-file drop sends items one after another." />
-                                </StackPanel>
-                                <StackPanel Grid.Row="2" Orientation="Horizontal">
-                                    <Button Style="{StaticResource ActionButtonStyle}" Click="SendFileClicked" Content="Choose Files" />
-                                    <TextBlock Margin="14,11,0,0" FontSize="13" Foreground="#89AFC0CF" Text="Folder relay comes next." />
-                                </StackPanel>
-                            </Grid>
-                        </Border>
-
-                        <Border Grid.Column="2" Padding="26" Background="{StaticResource SurfaceBrush}" BorderBrush="#1E6FD8F5" BorderThickness="1" CornerRadius="24">
-                            <Grid>
-                                <Grid.RowDefinitions>
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="Auto" />
-                                </Grid.RowDefinitions>
-
-                                <DockPanel>
-                                    <TextBlock Style="{StaticResource LabelStyle}" Text="Live transfer" />
-                                    <Border DockPanel.Dock="Right" Padding="10,6" Background="#1436D4E8" CornerRadius="12">
-                                        <TextBlock FontSize="12" FontWeight="SemiBold" Foreground="#FFBDFEFF" Text="{Binding ActiveTransferStatus}" />
-                                    </Border>
-                                </DockPanel>
-
-                                <StackPanel Grid.Row="1" Margin="0,18,0,0">
-                                    <TextBlock FontFamily="Segoe UI Variable Display" FontSize="30" FontWeight="SemiBold" Foreground="#FFF7FDFF" Text="{Binding ActiveTransferName}" />
-                                    <TextBlock Margin="0,8,0,0" FontSize="14" Foreground="#9CC3D3DF" Text="{Binding ActiveTransferPeer, StringFormat=Peer: {0}}" />
-                                    <TextBlock Margin="0,6,0,0" FontSize="13" FontWeight="SemiBold" Foreground="#FF7AF9EE" Text="{Binding ActiveTransferDirection}" />
-                                    <TextBlock Margin="0,10,0,0" FontSize="14" LineHeight="22" TextWrapping="Wrap" Foreground="#C1D7E3EB" Text="{Binding ActiveTransferSummary}" />
-                                </StackPanel>
-
-                                <StackPanel Grid.Row="2" Margin="0,24,0,0">
-                                    <ProgressBar Height="12" Minimum="0" Maximum="100" Value="{Binding ActiveTransferProgressPercent, Mode=OneWay}" Foreground="#FF47E0D1" Background="#1431D0E6" />
-                                    <DockPanel Margin="0,10,0,0">
-                                        <TextBlock FontSize="13" FontWeight="SemiBold" Foreground="#FFF4FCFF" Text="{Binding ActiveTransferProgressSummary}" />
-                                        <TextBlock DockPanel.Dock="Right" FontSize="13" Foreground="#8FB7C9D7" Text="{Binding ActiveTransferProgressPercent, StringFormat={}{0:0}%}" />
-                                    </DockPanel>
-                                </StackPanel>
-
-                                <Grid Grid.Row="3" Margin="0,24,0,0">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="*" />
-                                    </Grid.ColumnDefinitions>
+                            <Border Style="{StaticResource DropStageStyle}"
+                                    AllowDrop="True"
+                                    DragEnter="SendStageDragEnter"
+                                    DragOver="SendStageDragOver"
+                                    DragLeave="SendStageDragLeave"
+                                    Drop="SendStageDrop">
+                                <Grid Margin="26">
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="*" />
+                                        <RowDefinition Height="Auto" />
+                                    </Grid.RowDefinitions>
                                     <StackPanel>
-                                        <TextBlock Style="{StaticResource LabelStyle}" Text="Speed" />
-                                        <TextBlock Margin="0,8,0,0" FontSize="16" FontWeight="SemiBold" Foreground="#FFF4FCFF" Text="{Binding ActiveTransferSpeedSummary}" />
+                                        <TextBlock Style="{StaticResource LabelStyle}" Text="Outbound lane" />
+                                        <TextBlock Margin="0,12,0,0" FontFamily="Segoe UI Variable Display" FontSize="28" FontWeight="SemiBold" Foreground="#FFF4FCFF" TextWrapping="Wrap" Text="Drop files to send" />
+                                        <TextBlock Margin="0,10,0,0" FontSize="14" LineHeight="22" TextWrapping="Wrap" Foreground="#A9C3D1DC" Text="Drag files from Explorer or choose them below to send to your connected device." />
                                     </StackPanel>
-                                    <StackPanel Grid.Column="1">
-                                        <TextBlock Style="{StaticResource LabelStyle}" Text="ETA" />
-                                        <TextBlock Margin="0,8,0,0" FontSize="16" FontWeight="SemiBold" Foreground="#FFF4FCFF" Text="{Binding ActiveTransferEtaSummary}" />
+                                    <StackPanel Grid.Row="1" Margin="0,24,0,24" VerticalAlignment="Center">
+                                        <TextBlock FontSize="13" FontWeight="SemiBold" Foreground="#FF7FF9EE" Text="Drag and drop is active" />
+                                        <TextBlock Margin="0,8,0,0" FontSize="13" TextWrapping="Wrap" Foreground="#8FB7C9D7" Text="Multiple files are sent one after another." />
                                     </StackPanel>
-                                    <StackPanel Grid.Column="2">
-                                        <TextBlock Style="{StaticResource LabelStyle}" Text="Status" />
-                                        <TextBlock Margin="0,8,0,0" FontSize="16" FontWeight="SemiBold" Foreground="#FFF4FCFF" Text="{Binding StatusMessage}" />
+                                    <StackPanel Grid.Row="2">
+                                        <Button Style="{StaticResource ActionButtonStyle}" Click="SendFileClicked" Content="Choose Files" />
                                     </StackPanel>
                                 </Grid>
-                            </Grid>
-                        </Border>
-                    </Grid>
+                            </Border>
 
-                    <StackPanel Grid.Row="2" Margin="0,30,0,0">
-                        <TextBlock Style="{StaticResource LabelStyle}" Text="Recent activity" />
-                        <TextBlock Margin="0,8,0,0" FontSize="14" Foreground="#93B4C5D4" Text="Completed receives can be revealed instantly in Explorer." />
-                        <Border Style="{StaticResource DividerStyle}" />
-                        <ScrollViewer VerticalScrollBarVisibility="Auto">
-                            <ItemsControl ItemsSource="{Binding RecentTransfers}">
+                            <Border Grid.Column="2" Padding="26" Background="{StaticResource SurfaceBrush}" BorderBrush="#1E6FD8F5" BorderThickness="1" CornerRadius="24">
+                                <Grid>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                    </Grid.RowDefinitions>
+
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock x:Name="LiveTransferLabel" Style="{StaticResource LabelStyle}"
+                                                   Margin="0,0,20,0" VerticalAlignment="Center" Text="Live transfer" />
+                                        <Border x:Name="LiveTransferStatusBadge" Grid.Column="1" Style="{StaticResource StatusBadgeStyle}">
+                                            <TextBlock FontSize="12" FontWeight="SemiBold" Foreground="#FFBDFEFF" Text="{Binding ActiveTransferStatus}" />
+                                        </Border>
+                                    </Grid>
+
+                                    <StackPanel Grid.Row="1" Margin="0,22,0,0">
+                                        <TextBlock FontFamily="Segoe UI Variable Display" FontSize="26" LineHeight="32" MaxHeight="64"
+                                                   TextWrapping="Wrap" TextTrimming="CharacterEllipsis" ToolTip="{Binding ActiveTransferName}"
+                                                   FontWeight="SemiBold" Foreground="#FFF7FDFF" Text="{Binding ActiveTransferName}" />
+                                        <TextBlock Margin="0,10,0,0" FontSize="13" TextTrimming="CharacterEllipsis"
+                                                   ToolTip="{Binding ActiveTransferPeer}" Foreground="#9CC3D3DF" Text="{Binding ActiveTransferPeer, StringFormat=Peer: {0}}" />
+                                        <TextBlock Margin="0,6,0,0" FontSize="13" FontWeight="SemiBold" Foreground="#FF7AF9EE" Text="{Binding ActiveTransferDirection}" />
+                                        <TextBlock Margin="0,12,0,0" FontSize="13" LineHeight="20" TextWrapping="Wrap" Foreground="#C1D7E3EB" Text="{Binding ActiveTransferSummary}" />
+                                    </StackPanel>
+
+                                    <StackPanel Grid.Row="2" Margin="0,24,0,0">
+                                        <ProgressBar Style="{StaticResource TransferProgressStyle}" Minimum="0" Maximum="100" Value="{Binding ActiveTransferProgressPercent, Mode=OneWay}" />
+                                        <Grid Margin="0,12,0,0">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock x:Name="LiveTransferProgressText" Margin="0,0,20,0" FontSize="12"
+                                                       TextTrimming="CharacterEllipsis" ToolTip="{Binding ActiveTransferProgressSummary}"
+                                                       Foreground="#C1D7E3EB" Text="{Binding ActiveTransferProgressSummary}" />
+                                            <TextBlock x:Name="LiveTransferProgressPercent" Grid.Column="1" MinWidth="32" TextAlignment="Right"
+                                                       FontSize="12" FontWeight="SemiBold" Foreground="#FF7AF9EE"
+                                                       Visibility="{Binding HasActiveTransfer, Converter={StaticResource BoolToVisibilityConverter}}"
+                                                       Text="{Binding ActiveTransferProgressPercent, StringFormat={}{0:0}%}" />
+                                        </Grid>
+                                    </StackPanel>
+
+                                    <Grid Grid.Row="3" Margin="0,24,0,0" Visibility="{Binding HasActiveTransfer, Converter={StaticResource BoolToVisibilityConverter}}">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel>
+                                            <TextBlock Style="{StaticResource LabelStyle}" Text="Speed" />
+                                            <TextBlock Margin="0,8,20,0" FontSize="14" TextTrimming="CharacterEllipsis"
+                                                       ToolTip="{Binding ActiveTransferSpeedSummary}" FontWeight="SemiBold" Foreground="#FFF4FCFF" Text="{Binding ActiveTransferSpeedSummary}" />
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="1">
+                                            <TextBlock Style="{StaticResource LabelStyle}" Text="ETA" />
+                                            <TextBlock Margin="0,8,0,0" FontSize="14" TextTrimming="CharacterEllipsis"
+                                                       ToolTip="{Binding ActiveTransferEtaSummary}" FontWeight="SemiBold" Foreground="#FFF4FCFF" Text="{Binding ActiveTransferEtaSummary}" />
+                                        </StackPanel>
+                                    </Grid>
+                                </Grid>
+                            </Border>
+                        </Grid>
+
+                        <Grid Grid.Row="2" Margin="0,28,0,0">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="*" />
+                            </Grid.RowDefinitions>
+                            <StackPanel>
+                                <TextBlock Style="{StaticResource LabelStyle}" Text="Recent activity" />
+                                <TextBlock Margin="0,8,0,0" FontSize="13" TextWrapping="Wrap" Foreground="#93B4C5D4" Text="Open received files in Explorer with the folder button." />
+                                <Border Style="{StaticResource DividerStyle}" />
+                            </StackPanel>
+                            <ItemsControl Grid.Row="1" ItemsSource="{Binding RecentTransfers}">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate DataType="{x:Type models:TransferSummary}">
-                                        <Border Margin="0,0,0,14" Padding="18,16" Background="#1015212C" CornerRadius="22">
+                                        <Border Margin="0,0,0,12" Padding="18,18" Background="#0C15212C" CornerRadius="16">
                                             <StackPanel>
-                                                <DockPanel>
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*" />
+                                                        <ColumnDefinition Width="Auto" />
+                                                    </Grid.ColumnDefinitions>
                                                     <StackPanel>
-                                                        <TextBlock FontSize="17" FontWeight="SemiBold" Foreground="#FFF7FDFF" Text="{Binding Name}" />
-                                                        <TextBlock Margin="0,4,0,0" FontSize="13" Foreground="#96B8CAD7" Text="{Binding Peer}" />
+                                                        <TextBlock x:Name="HistoryTransferName" FontSize="16" FontWeight="SemiBold" Foreground="#FFF7FDFF"
+                                                                   Text="{Binding Name}" TextTrimming="CharacterEllipsis" ToolTip="{Binding Name}" />
+                                                        <WrapPanel Margin="0,8,0,0">
+                                                            <TextBlock FontSize="12" Foreground="#96B8CAD7" Text="{Binding Peer}" />
+                                                            <TextBlock Margin="10,0" FontSize="12" Foreground="#536E8292" Text="/" />
+                                                            <TextBlock FontSize="12" Foreground="#FF7AF9EE" Text="{Binding Direction}" />
+                                                        </WrapPanel>
                                                     </StackPanel>
-                                                    <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                                                    <StackPanel x:Name="HistoryTransferActions" Grid.Column="1" Margin="24,0,0,0"
+                                                                Orientation="Horizontal" VerticalAlignment="Top">
                                                         <Button Style="{StaticResource ShelfIconButtonStyle}"
-                                                                Margin="0,0,10,0"
+                                                                Margin="0,0,12,0" VerticalAlignment="Center"
                                                                 Click="RevealTransferClicked"
                                                                 Tag="{Binding RevealPath}"
                                                                 Visibility="{Binding CanReveal, Converter={StaticResource BoolToVisibilityConverter}}"
@@ -355,32 +478,37 @@
                                                                 </Canvas>
                                                             </Viewbox>
                                                         </Button>
-                                                        <Border Padding="10,6" Background="#1435D4E8" CornerRadius="12">
+                                                        <Border Style="{StaticResource StatusBadgeStyle}">
                                                             <TextBlock FontSize="12" FontWeight="SemiBold" Foreground="#FFBDFEFF" Text="{Binding Status}" />
                                                         </Border>
                                                     </StackPanel>
-                                                </DockPanel>
-                                                <TextBlock Margin="0,10,0,0" FontSize="13" FontWeight="SemiBold" Foreground="#FF7AF9EE" Text="{Binding Direction}" />
-                                                <TextBlock Margin="0,6,0,0" FontSize="13" LineHeight="20" TextWrapping="Wrap" Foreground="#C1D7E3EB" Text="{Binding Summary}" />
-                                                <ProgressBar Margin="0,14,0,0" Height="8" Minimum="0" Maximum="100" Value="{Binding ProgressPercent, Mode=OneWay}" Foreground="#FF47E0D1" Background="#1231D0E6" />
-                                                <Grid Margin="0,10,0,0">
+                                                </Grid>
+                                                <TextBlock Margin="0,12,0,0" FontSize="12" LineHeight="18" MaxHeight="36" TextWrapping="Wrap"
+                                                           TextTrimming="CharacterEllipsis" ToolTip="{Binding Summary}" Foreground="#A8C1D2DF" Text="{Binding Summary}" />
+                                                <ProgressBar Style="{StaticResource TransferProgressStyle}" Margin="0,16,0,0"
+                                                             Visibility="{Binding IsActive, Converter={StaticResource BoolToVisibilityConverter}}"
+                                                             Minimum="0" Maximum="100" Value="{Binding ProgressPercent, Mode=OneWay}" />
+                                                <Grid Margin="0,12,0,0">
                                                     <Grid.ColumnDefinitions>
                                                         <ColumnDefinition Width="*" />
                                                         <ColumnDefinition Width="Auto" />
                                                         <ColumnDefinition Width="Auto" />
                                                     </Grid.ColumnDefinitions>
-                                                    <TextBlock FontSize="12" Foreground="#91B5C7D5" Text="{Binding ProgressSummary}" />
-                                                    <TextBlock Grid.Column="1" Margin="14,0,0,0" FontSize="12" Foreground="#91B5C7D5" Text="{Binding SpeedSummary}" />
-                                                    <TextBlock Grid.Column="2" Margin="14,0,0,0" FontSize="12" Foreground="#91B5C7D5" Text="{Binding EtaSummary}" />
+                                                    <TextBlock Margin="0,0,16,0" FontSize="12" TextTrimming="CharacterEllipsis"
+                                                               Foreground="#91B5C7D5" Text="{Binding ProgressSummary}" />
+                                                    <TextBlock Grid.Column="1" Margin="0,0,16,0" FontSize="12" Foreground="#91B5C7D5" Text="{Binding SpeedSummary}"
+                                                               Visibility="{Binding IsActive, Converter={StaticResource BoolToVisibilityConverter}}" />
+                                                    <TextBlock Grid.Column="2" FontSize="12" Foreground="#91B5C7D5" Text="{Binding EtaSummary}"
+                                                               Visibility="{Binding IsActive, Converter={StaticResource BoolToVisibilityConverter}}" />
                                                 </Grid>
                                             </StackPanel>
                                         </Border>
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>
-                        </ScrollViewer>
-                    </StackPanel>
-                </Grid>
+                        </Grid>
+                    </Grid>
+                </ScrollViewer>
             </Grid>
         </Border>
     </Grid>

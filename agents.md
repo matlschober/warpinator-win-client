@@ -94,6 +94,7 @@ Completed:
 - Fixed false receive failures caused by upstream allocated-size metadata: require a clean gRPC stream and all advertised files/directories, use actual payload bytes for completed progress, and cover the observed 1,295,651 / 1,298,432-byte mismatch in TLS/gRPC regression checks
 - Added targeted registration recovery after Linux's return-connection timeout following a Windows restart; normal discovery still avoids manual registration, and regression checks cover the timeout/recovery path
 - Verified the real FLAC receive completes with 1,295,651 payload bytes against 1,298,432 advertised bytes, with the same SHA256 as the earlier copy; verified automatic reconnection after restarting Windows without restarting Linux; all twelve regression checks pass and the Release build has zero warnings/errors
+- Refined transfer spacing with dedicated title/action columns, compact aligned status badges, rounded progress bars, long-name tooltips, and a scrollable workspace; verified idle and active layouts at 1080, 1260, and 1600 pixel widths
 
 In progress:
 

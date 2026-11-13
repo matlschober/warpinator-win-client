@@ -82,6 +82,7 @@ Areas we expect to keep dependency-free:
 
 ## Change Log
 
+- 2026-11-13: Refined transfer layouts, progress bars, and scrolling with native WPF templates; no dependencies added
 - 2026-11-13: Added targeted duplex-timeout registration recovery using the existing gRPC registration service; dependency set unchanged
 - 2026-11-13: Corrected receive completion for Linux's allocated-size metadata and added item-count and stream-error regression coverage without adding dependencies
 - 2026-11-13: Fixed discovery retries and added the Search action, isolated regression checks, and a live discovery diagnostic using the existing .NET, WPF, and mDNS dependencies

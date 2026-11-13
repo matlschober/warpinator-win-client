@@ -16,12 +16,12 @@ public sealed class MainViewModel : INotifyPropertyChanged
     private string transferCountSummary = string.Empty;
     private string saveFolderSummary = string.Empty;
     private string compatibilitySummary = "Move files between this PC and Linux peers on the same network.";
-    private string activeTransferName = "Drop a file to start the next transfer";
+    private string activeTransferName = "No active transfer";
     private string activeTransferPeer = "Waiting for a connected peer";
-    private string activeTransferDirection = "Transfer queue";
+    private string activeTransferDirection = "Send or receive";
     private string activeTransferStatus = "Idle";
-    private string activeTransferSummary = "Drag files into the send stage or use Send File to start the next move.";
-    private string activeTransferProgressSummary = "No active bytes in flight";
+    private string activeTransferSummary = "Choose files to send, or receive them from a connected device.";
+    private string activeTransferProgressSummary = "Waiting for a transfer";
     private string activeTransferSpeedSummary = "Waiting";
     private string activeTransferEtaSummary = "No ETA";
     private double activeTransferProgressPercent;
@@ -276,12 +276,12 @@ public sealed class MainViewModel : INotifyPropertyChanged
         if (activeTransfer is null)
         {
             HasActiveTransfer = false;
-            ActiveTransferName = "Drop a file to start the next transfer";
-            ActiveTransferPeer = snapshot.Peers.FirstOrDefault()?.DisplayName ?? "Waiting for a connected Linux peer";
-            ActiveTransferDirection = "Transfer queue";
+            ActiveTransferName = "No active transfer";
+            ActiveTransferPeer = snapshot.Peers.FirstOrDefault(peer => peer.Availability == "Connected")?.DisplayName ?? "Waiting for a connected Linux peer";
+            ActiveTransferDirection = "Send or receive";
             ActiveTransferStatus = "Idle";
-            ActiveTransferSummary = "Drag files into the send stage or use Send File to start the next move.";
-            ActiveTransferProgressSummary = "No active bytes in flight";
+            ActiveTransferSummary = "Choose files to send, or receive them from a connected device.";
+            ActiveTransferProgressSummary = "Waiting for a transfer";
             ActiveTransferSpeedSummary = "Waiting";
             ActiveTransferEtaSummary = "No ETA";
             ActiveTransferProgressPercent = 0;
