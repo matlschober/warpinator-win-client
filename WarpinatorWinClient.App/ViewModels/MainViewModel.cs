@@ -27,8 +27,29 @@ public sealed class MainViewModel : INotifyPropertyChanged
     private double activeTransferProgressPercent;
     private bool hasActiveTransfer;
     private bool isDropTargetActive;
+    private bool canSearch;
+    private string searchButtonText = "Search";
+    private string connectionSummary = "Starting…";
 
     public event PropertyChangedEventHandler? PropertyChanged;
+
+    public bool CanSearch
+    {
+        get => canSearch;
+        private set => SetField(ref canSearch, value);
+    }
+
+    public string SearchButtonText
+    {
+        get => searchButtonText;
+        private set => SetField(ref searchButtonText, value);
+    }
+
+    public string ConnectionSummary
+    {
+        get => connectionSummary;
+        private set => SetField(ref connectionSummary, value);
+    }
 
     public string StatusMessage
     {
@@ -177,6 +198,12 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
     public void ApplyRuntimeSnapshot(WarpinatorRuntimeSnapshot snapshot)
     {
+        CanSearch = snapshot.IsRunning && !snapshot.IsSearching;
+        SearchButtonText = snapshot.IsSearching ? "Searching…" : "Search";
+        var connectedCount = snapshot.Peers.Count(peer => peer.Availability == "Connected");
+        ConnectionSummary = !snapshot.IsRunning ? "Service offline"
+            : connectedCount > 0 ? $"{connectedCount} device(s) connected"
+            : snapshot.IsSearching ? "Searching the network…" : "No connected devices";
         StatusMessage = snapshot.StatusMessage;
         TransferReadiness = snapshot.TransferReadiness;
         PeerCountSummary = snapshot.PeerCountSummary;

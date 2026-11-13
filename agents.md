@@ -16,7 +16,7 @@ Primary goals:
 
 - UI: WPF desktop application
 - Core: dependency-free .NET class library for protocol contracts and shared models
-- Runtime: .NET 7
+- Runtime: .NET 10 LTS
 - Language: C#
 - Strategy: implement only the minimum required pieces for Warpinator interoperability first, then expand carefully
 
@@ -43,19 +43,20 @@ Current upstream compatibility facts captured in code:
 Why this direction:
 
 - WPF is built into the installed Windows desktop runtime and keeps the app native and lightweight
-- .NET 7 is already available locally, which avoids raising the dependency floor immediately
+- .NET 10 LTS provides a supported runtime while preserving the lightweight native desktop architecture
 - C# gives us strong async/networking support with low implementation friction
 - A separate core library gives us a clean place for protocol and transfer logic without bloating the UI layer
 
 ## Project Status
 
-Current phase: bidirectional file transfer paths implemented; receive compatibility fix and Windows-to-Linux live send pending verification
+Current phase: bidirectional file transfer paths implemented; live FLAC receive and Windows-restart reconnection verified; Windows-to-Linux destination verification pending
 
 Completed:
 
 - Confirmed that a Windows client compatible with Warpinator is technically feasible
-- Verified local development environment includes .NET 7 SDK and Windows desktop runtime
-- Chosen an initial lightweight application direction: WPF on .NET 7
+- Verified local development environment includes the .NET 10 SDK and Windows desktop runtime
+- Chosen a lightweight native application direction with WPF
+- Upgraded the app, core library, regression runner, and Windows CI to .NET 10 LTS with stable SDK selection in `global.json`; verified a Release build with zero warnings/errors, all isolated TLS/gRPC regression checks, and framework-dependent Windows x64 publishing
 - Created living project documents in the repository root
 - Scaffolded a WPF solution and application project
 - Refined the shell UI toward a modern, minimal product-surface design with stronger hierarchy and subtle entrance motion
@@ -86,10 +87,16 @@ Completed:
 - Refined the Explorer reveal affordance from a text chip into a compact folder action modeled after modern download-shelf UI
 - Removed disposable build outputs, debug logs, and generated `bin`/`obj` folders from the workspace so the project tree stays deployment-ready
 - Added GitHub/community packaging files: `README.md`, `.gitignore`, `LICENSE`, `CONTRIBUTING.md`, `CHANGELOG.md`, and a Windows build workflow under `.github/workflows`
+- Fixed missed startup discovery with repeated queries, automatic 10-second browsing, a working Search action, immediate UI updates for inbound probes, and preservation of connected peers during repeated browsing
+- Verified live discovery, certificate exchange, duplex checks, and secure-session keepalive against Linux peer `madmax-Aspire-E5-774G` (`MadMaxII`) at `192.168.86.53`; added isolated discovery and reconnection regression checks and an optional `--discover` diagnostic
+- Verified automatic discovery after reopening Linux Warpinator and exercised the Search button through Windows UI Automation: busy feedback, completion, and preservation of the live connection all pass; Release build and all eight isolated regression checks pass
+- Removed obsolete framework build outputs, intermediate files, and the old receive-fix publication; the project uses only the .NET 10 baseline
+- Fixed false receive failures caused by upstream allocated-size metadata: require a clean gRPC stream and all advertised files/directories, use actual payload bytes for completed progress, and cover the observed 1,295,651 / 1,298,432-byte mismatch in TLS/gRPC regression checks
+- Added targeted registration recovery after Linux's return-connection timeout following a Windows restart; normal discovery still avoids manual registration, and regression checks cover the timeout/recovery path
+- Verified the real FLAC receive completes with 1,295,651 payload bytes against 1,298,432 advertised bytes, with the same SHA256 as the earlier copy; verified automatic reconnection after restarting Windows without restarting Linux; all twelve regression checks pass and the Release build has zero warnings/errors
 
 In progress:
 
-- Rechecking Linux-to-Windows receive after fixing simultaneous manual/mDNS registration, declining unsupported compression, and rejecting incomplete streams; isolated TLS/gRPC regression checks pass
 - Verifying the first real Windows-to-Linux file send against the live Linux machine
 - Verifying the polished consumer-facing shell, Explorer reveal action, and updated transfer affordances against live file movement
 
@@ -115,5 +122,4 @@ Next milestones:
 - Whether the checked-in generated gRPC sources should remain the default build path or be replaced later by a cleaner automated generation flow
 - Whether the selected mDNS library behaves reliably across multiple Windows network adapters in real-world LAN conditions
 - Whether symbolic links and full metadata preservation should stay deferred until after the first stable transfer release
-- Whether current local SDK/runtime constraints should remain on .NET 7 initially or be upgraded later once compatibility is proven
 

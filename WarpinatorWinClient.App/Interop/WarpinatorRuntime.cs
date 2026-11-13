@@ -30,6 +30,9 @@ public sealed class WarpinatorRuntime : IDisposable
     private ServiceDiscovery? discovery;
     private ServiceProfile? advertisedProfile;
     private bool started;
+    private int searchInProgress;
+    private CancellationTokenSource? discoveryCancellation;
+    private Task? discoveryTask;
 
     public event EventHandler<WarpinatorRuntimeSnapshot>? SnapshotChanged;
 
@@ -74,9 +77,9 @@ public sealed class WarpinatorRuntime : IDisposable
                 "Discovery and registration live",
                 "Wait for discovery or let your Linux machine see this Windows client on the LAN.");
 
-            await Task.Delay(250, cancellationToken);
-            discovery?.QueryServiceInstances(ServiceType);
-            discovery?.QueryUnicastServiceInstances(ServiceType);
+            discoveryCancellation = new CancellationTokenSource();
+            discoveryTask = BrowseForPeersAsync(discoveryCancellation.Token);
+            await SearchPeersAsync(cancellationToken);
         }
         catch (Exception ex)
         {
@@ -89,9 +92,111 @@ public sealed class WarpinatorRuntime : IDisposable
         }
     }
 
+    public async Task SearchPeersAsync(CancellationToken cancellationToken = default)
+    {
+        if (!started || discovery is null)
+        {
+            throw new InvalidOperationException("The local network service is not running yet.");
+        }
+
+        if (Interlocked.CompareExchange(ref searchInProgress, 1, 0) != 0)
+        {
+            return;
+        }
+
+        using var searchCancellation = CancellationTokenSource.CreateLinkedTokenSource(
+            cancellationToken, discoveryCancellation?.Token ?? CancellationToken.None);
+        try
+        {
+            RuntimeLog.Write("Peer search requested.");
+            PublishSnapshot("Searching for nearby Warpinator devices…", "Searching", "Keep Linux Warpinator open on the same network.");
+            for (var attempt = 0; attempt < 3; attempt++)
+            {
+                searchCancellation.Token.ThrowIfCancellationRequested();
+                QueryPeers();
+                await Task.Delay(TimeSpan.FromSeconds(1), searchCancellation.Token).ConfigureAwait(false);
+            }
+        }
+        finally
+        {
+            Interlocked.Exchange(ref searchInProgress, 0);
+            if (started && !searchCancellation.IsCancellationRequested)
+            {
+                int connectedCount;
+                int peerCount;
+                lock (gate)
+                {
+                    connectedCount = peers.Values.Count(peer => peer.Availability == "Connected");
+                    peerCount = peers.Values.Count(peer => peer.Availability != "Offline");
+                }
+
+                PublishSnapshot(
+                    connectedCount > 0 ? $"Search complete. {connectedCount} device(s) connected."
+                        : peerCount > 0 ? "Search complete. Connecting to discovered devices."
+                        : "No devices found yet. Search again or keep Warpinator open on Linux.",
+                    "Discovery and registration live",
+                    "Automatic network discovery continues in the background.");
+            }
+        }
+    }
+
+    private void QueryPeers()
+    {
+        discovery?.QueryServiceInstances(ServiceType);
+        discovery?.QueryUnicastServiceInstances(ServiceType);
+
+        string[] retryIds;
+        lock (gate)
+        {
+            retryIds = peers.Values
+                .Where(peer => !peer.IsRegistering && !peer.HasActiveSecureSession
+                    && peer.Availability != "Offline"
+                    && !string.IsNullOrWhiteSpace(peer.Address) && peer.AuthenticationPort > 0)
+                .Select(peer => peer.Id).ToArray();
+        }
+        foreach (var peerId in retryIds)
+        {
+            _ = Task.Run(() => RegisterPeerAsync(peerId));
+        }
+    }
+
+    private async Task BrowseForPeersAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var timer = new PeriodicTimer(TimeSpan.FromSeconds(10));
+            while (await timer.WaitForNextTickAsync(cancellationToken).ConfigureAwait(false))
+            {
+                try
+                {
+                    QueryPeers();
+                }
+                catch (Exception ex)
+                {
+                    RuntimeLog.Write("Background discovery query failed: " + ex);
+                }
+            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+        }
+    }
+
     public async Task StopAsync()
     {
         RuntimeLog.Write("Stopping runtime services.");
+        started = false;
+        if (discoveryCancellation is not null)
+        {
+            await discoveryCancellation.CancelAsync();
+            if (discoveryTask is not null)
+            {
+                await discoveryTask.ConfigureAwait(false);
+                discoveryTask = null;
+            }
+            discoveryCancellation.Dispose();
+            discoveryCancellation = null;
+        }
 
         List<CancellationTokenSource> sessionTokens;
         lock (gate)
@@ -257,12 +362,14 @@ public sealed class WarpinatorRuntime : IDisposable
             return;
         }
 
+        var isNewPeer = false;
         lock (gate)
         {
             if (!peers.TryGetValue(serviceId, out var peerState))
             {
                 peerState = new RuntimePeerState(serviceId);
                 peers[serviceId] = peerState;
+                isNewPeer = true;
             }
 
             if (string.IsNullOrWhiteSpace(peerState.DisplayName))
@@ -293,6 +400,11 @@ public sealed class WarpinatorRuntime : IDisposable
         }
 
         RuntimeLog.Write($"Observed inbound peer probe from '{serviceId}' ({readableName}) via {remotePeerDescriptor}.");
+        if (isNewPeer)
+        {
+            PublishSnapshot("A nearby device is connecting.", "Discovery and registration live", "Resolving the device's network service.");
+            discovery?.QueryServiceInstances(ServiceType);
+        }
     }
 
     internal bool CanAcceptDuplexProbe(string serviceId, string readableName, string remotePeerDescriptor)
@@ -355,7 +467,7 @@ public sealed class WarpinatorRuntime : IDisposable
             transferState.IsStreamActive = true;
         }
 
-        RuntimeLog.Write($"Accepted incoming transfer request '{transferState.Name}' from {peerDisplayName}.");
+        RuntimeLog.Write($"Accepted incoming transfer request '{transferState.Name}' from {peerDisplayName}: advertised size={request.Size}, items={request.Count}.");
         PublishSnapshot(
             $"Accepted incoming transfer from {peerDisplayName}.",
             "Inbound transfer active",
@@ -565,12 +677,17 @@ public sealed class WarpinatorRuntime : IDisposable
                 peers[discoveredPeer.Id] = peerState;
             }
 
-            peerState.DisplayName = discoveredPeer.DisplayName;
             peerState.Hostname = discoveredPeer.Hostname;
             peerState.Address = discoveredPeer.Address;
             peerState.TransferPort = discoveredPeer.TransferPort;
             peerState.AuthenticationPort = discoveredPeer.AuthenticationPort;
             peerState.ApiVersion = discoveredPeer.ApiVersion;
+            // Repeated browse responses must not downgrade an existing connection.
+            if (peerState.HasActiveSecureSession || peerState.IsRegistering)
+            {
+                return;
+            }
+            peerState.DisplayName = discoveredPeer.DisplayName;
             peerState.Availability = "Discovered";
             peerState.Details = $"api v{peerState.ApiVersion}, transfer {peerState.TransferPort}, auth {peerState.AuthenticationPort}";
         }
@@ -587,15 +704,24 @@ public sealed class WarpinatorRuntime : IDisposable
     private void OnServiceInstanceShutdown(object? sender, ServiceInstanceShutdownEventArgs e)
     {
         var instanceName = e.ServiceInstanceName.ToString();
+        if (!instanceName.Contains($".{ServiceType}.", StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
         var serviceId = instanceName.Split('.', StringSplitOptions.RemoveEmptyEntries)[0];
 
         lock (gate)
         {
-            if (peers.TryGetValue(serviceId, out var peerState))
+            if (!peers.TryGetValue(serviceId, out var peerState))
             {
-                peerState.Availability = "Offline";
-                peerState.Details = "The peer stopped advertising its Warpinator service.";
+                return;
             }
+            if (peerSessionTokens.TryGetValue(serviceId, out var sessionToken))
+            {
+                sessionToken.Cancel();
+            }
+            peerState.Availability = "Offline";
+            peerState.Details = "The peer stopped advertising its Warpinator service.";
         }
 
         RuntimeLog.Write("Peer shutdown observed: " + serviceId);
@@ -620,7 +746,7 @@ public sealed class WarpinatorRuntime : IDisposable
                 return;
             }
 
-            if (peerState.IsRegistering)
+            if (peerState.IsRegistering || peerState.HasActiveSecureSession)
             {
                 return;
             }
@@ -736,7 +862,7 @@ public sealed class WarpinatorRuntime : IDisposable
             if (peers.TryGetValue(peerId, out var peerState))
             {
                 peerState.HasActiveSecureSession = true;
-                peerState.Availability = "Connected";
+                peerState.Availability = "Connecting";
                 peerState.Details = "Registration succeeded and the secure Warp session is being maintained.";
             }
         }
@@ -782,7 +908,7 @@ public sealed class WarpinatorRuntime : IDisposable
             channel = new Channel(
                 $"{peerState.Address}:{peerState.TransferPort}",
                 new SslCredentials(remoteCertificatePem),
-                new[] 
+                new[]
                 {
                     new ChannelOption("grpc.keepalive_time_ms", 10_000),
                     new ChannelOption("grpc.keepalive_timeout_ms", 5_000),
@@ -824,8 +950,13 @@ public sealed class WarpinatorRuntime : IDisposable
             {
                 if (peers.TryGetValue(peerId, out var mutablePeerState))
                 {
+                    if (!string.IsNullOrWhiteSpace(remoteMachineInfo.DisplayName))
+                    {
+                        mutablePeerState.DisplayName = remoteMachineInfo.DisplayName;
+                    }
                     mutablePeerState.Availability = "Connected";
                     mutablePeerState.Details = $"Secure Warp session active with {remoteMachineInfo.DisplayName}.";
+                    mutablePeerState.DuplexRecoveryAttempted = false;
                 }
             }
 
@@ -848,6 +979,34 @@ public sealed class WarpinatorRuntime : IDisposable
         catch (Exception ex)
         {
             RuntimeLog.Write($"Secure peer session failed for {peerId}: {ex}");
+
+            var recoverDuplex = false;
+            lock (gate)
+            {
+                // A restarted Windows service has a new certificate. Linux can still
+                // be retrying the old cached certificate and time out on its return
+                // connection. Refresh its existing peer record only after this specific
+                // failure; normal mDNS discovery must not race manual registration.
+                if (ex is RpcException { StatusCode: StatusCode.DeadlineExceeded } rpc
+                    && rpc.Status.Detail.Contains("corresponding remote", StringComparison.OrdinalIgnoreCase)
+                    && !peerState.DuplexRecoveryAttempted && !cancellationToken.IsCancellationRequested)
+                {
+                    peerState.DuplexRecoveryAttempted = true;
+                    recoverDuplex = true;
+                }
+            }
+
+            if (recoverDuplex)
+            {
+                try
+                {
+                    await RefreshRemoteRegistrationAsync(peerState, cancellationToken).ConfigureAwait(false);
+                }
+                catch (Exception recoveryException)
+                {
+                    RuntimeLog.Write($"Duplex registration recovery failed for {peerId}: {recoveryException}");
+                }
+            }
 
             lock (gate)
             {
@@ -890,6 +1049,36 @@ public sealed class WarpinatorRuntime : IDisposable
             {
                 await channel.ShutdownAsync();
             }
+        }
+    }
+
+    private async Task RefreshRemoteRegistrationAsync(RuntimePeerState peerState, CancellationToken cancellationToken)
+    {
+        var profile = localProfile ?? throw new InvalidOperationException("The local profile is unavailable.");
+        var channel = new Channel($"{peerState.Address}:{peerState.AuthenticationPort}", ChannelCredentials.Insecure);
+        try
+        {
+            RuntimeLog.Write($"Refreshing existing remote registration for {peerState.Id} after a duplex timeout.");
+            await channel.ConnectAsync(DateTime.UtcNow.AddSeconds(5)).ConfigureAwait(false);
+            var client = new WarpRegistration.WarpRegistrationClient(channel);
+            var response = await client.RegisterServiceAsync(new ServiceRegistration
+            {
+                ServiceId = profile.ServiceId,
+                Hostname = profile.HostName,
+                Ip = profile.Ipv4Address.ToString(),
+                Port = (uint)profile.TransferPort,
+                AuthPort = (uint)profile.AuthenticationPort,
+                ApiVersion = (uint)profile.ApiVersion
+            }, deadline: DateTime.UtcNow.AddSeconds(15), cancellationToken: cancellationToken);
+            if (!string.Equals(response.ServiceId, peerState.Id, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException("The registration response belongs to a different peer.");
+            }
+            RuntimeLog.Write($"Existing remote registration refreshed for {peerState.Id}; retrying the secure connection.");
+        }
+        finally
+        {
+            await channel.ShutdownAsync().ConfigureAwait(false);
         }
     }
 
@@ -993,11 +1182,16 @@ public sealed class WarpinatorRuntime : IDisposable
                         }
                     }
 
-                    if ((!sawAnyChunk && transferState.TotalCount > 0)
-                        || transferState.BytesReceived != transferState.TotalSize)
+                    RuntimeLog.Write($"Inbound stream ended normally for {transferKey}: received bytes={transferState.BytesReceived}, advertised size={transferState.TotalSize}, items={writer.ReceivedItemCount}/{transferState.TotalCount}.");
+                    // Linux advertises max(logical size, allocated disk space),
+                    // including directory allocation. It is a space/progress estimate,
+                    // not an exact payload length. Match upstream completion semantics:
+                    // a clean gRPC EOF and every advertised file/directory received.
+                    // FileChunk carries no per-file length or checksum.
+                    if (!sawAnyChunk || writer.ReceivedItemCount != transferState.TotalCount)
                     {
                         throw new InvalidOperationException(
-                            $"The sender ended the stream after {transferState.BytesReceived} of {transferState.TotalSize} bytes.");
+                            $"The sender ended the stream after {writer.ReceivedItemCount} of {transferState.TotalCount} items ({transferState.BytesReceived} bytes received).");
                     }
 
                     receiveCompleted = true;
@@ -1027,6 +1221,7 @@ public sealed class WarpinatorRuntime : IDisposable
             {
                 transferState.IsStreamActive = false;
                 transferState.Status = "Completed";
+                transferState.TotalSize = transferState.BytesReceived;
                 transferState.CompletedAtUtc = DateTimeOffset.UtcNow;
                 transferState.Summary = $"Saved to {settings.SaveFolderPath}.";
                 transferState.RevealPath = writer.RevealPath;
@@ -1217,59 +1412,66 @@ public sealed class WarpinatorRuntime : IDisposable
 
     private void PublishSnapshot(string statusMessage, string currentPhase, string nextStep)
     {
-        var profile = localProfile;
-        var transferSnapshots = transfers.Values
-            .OrderByDescending(transfer => transfer.StartedAtUtc)
-            .Take(8)
-            .Select(transfer => new WarpinatorRuntimeTransfer
-            {
-                Name = transfer.Name,
-                Peer = string.IsNullOrWhiteSpace(transfer.PeerDisplayName) ? transfer.PeerId : transfer.PeerDisplayName,
-                Direction = transfer.IsInbound ? "Receiving" : "Sending",
-                Status = transfer.Status,
-                Summary = transfer.Summary,
-                ProgressSummary = GetTransferProgressSummary(transfer),
-                SpeedSummary = GetTransferSpeedSummary(transfer),
-                EtaSummary = GetTransferEtaSummary(transfer),
-                ProgressPercent = GetTransferProgressPercent(transfer),
-                IsActive = IsTransferActive(transfer),
-                RevealPath = transfer.RevealPath,
-                CanReveal = CanRevealTransfer(transfer)
-            })
-            .ToArray();
-
-        var snapshot = new WarpinatorRuntimeSnapshot
+        WarpinatorRuntimeSnapshot snapshot;
+        lock (gate)
         {
-            StatusMessage = statusMessage,
-            CurrentPhase = currentPhase,
-            TransferReadiness = started
-                ? "Ready to send and receive files with nearby Linux devices."
-                : "Starting the local transfer service.",
-            NextStep = nextStep,
-            PeerCountSummary = peers.Count.ToString(CultureInfo.InvariantCulture),
-            TransferCountSummary = transfers.Values.Count(transfer => string.Equals(transfer.Status, "Completed", StringComparison.OrdinalIgnoreCase)).ToString(CultureInfo.InvariantCulture),
-            DependencyBudgetSummary = "5 external",
-            ProtocolPortsSummary = profile is null
-                ? $"Transfer {WarpinatorProtocolDefaults.TransferPort}, auth {WarpinatorProtocolDefaults.AuthenticationPort}"
-                : $"Transfer {profile.TransferPort}, auth {profile.AuthenticationPort}",
-            ApiVersionsSummary = string.Join(", ", WarpinatorProtocolDefaults.SupportedApiVersions),
-            GroupCodeSummary = profile?.GroupCode ?? settings.GroupCode,
-            RpcSurfaceSummary = $"{WarpinatorProtocolDefaults.TransferServiceMethods.Count} transfer RPCs, {WarpinatorProtocolDefaults.RegistrationServiceMethods.Count} registration RPCs",
-            SaveFolderSummary = profile?.SaveFolderPath ?? settings.SaveFolderPath,
-            Peers = peers.Values
-                .OrderBy(peer => peer.DisplayName, StringComparer.OrdinalIgnoreCase)
-                .Select(peer => new WarpinatorRuntimePeer
+            var profile = localProfile;
+            var transferSnapshots = transfers.Values
+                .OrderByDescending(transfer => transfer.StartedAtUtc)
+                .Take(8)
+                .Select(transfer => new WarpinatorRuntimeTransfer
                 {
-                    Id = peer.Id,
-                    DisplayName = string.IsNullOrWhiteSpace(peer.DisplayName) ? peer.Id : peer.DisplayName,
-                    Endpoint = string.IsNullOrWhiteSpace(peer.Address) ? "No endpoint yet" : $"{peer.Address}:{peer.TransferPort}",
-                    Details = peer.Details,
-                    Availability = peer.Availability
+                    Name = transfer.Name,
+                    Peer = string.IsNullOrWhiteSpace(transfer.PeerDisplayName) ? transfer.PeerId : transfer.PeerDisplayName,
+                    Direction = transfer.IsInbound ? "Receiving" : "Sending",
+                    Status = transfer.Status,
+                    Summary = transfer.Summary,
+                    ProgressSummary = GetTransferProgressSummary(transfer),
+                    SpeedSummary = GetTransferSpeedSummary(transfer),
+                    EtaSummary = GetTransferEtaSummary(transfer),
+                    ProgressPercent = GetTransferProgressPercent(transfer),
+                    IsActive = IsTransferActive(transfer),
+                    RevealPath = transfer.RevealPath,
+                    CanReveal = CanRevealTransfer(transfer)
                 })
-                .Cast<WarpinatorRuntimePeer>()
-                .ToArray(),
-            Transfers = transferSnapshots
-        };
+                .ToArray();
+
+            snapshot = new WarpinatorRuntimeSnapshot
+            {
+                IsRunning = started,
+                IsSearching = Volatile.Read(ref searchInProgress) != 0,
+                StatusMessage = statusMessage,
+                CurrentPhase = currentPhase,
+                TransferReadiness = !started ? "Local network service is offline."
+                    : peers.Values.Any(peer => peer.Availability == "Connected")
+                        ? "Ready to send and receive files."
+                        : "Looking for nearby Warpinator devices.",
+                NextStep = nextStep,
+                PeerCountSummary = peers.Count.ToString(CultureInfo.InvariantCulture),
+                TransferCountSummary = transfers.Values.Count(transfer => string.Equals(transfer.Status, "Completed", StringComparison.OrdinalIgnoreCase)).ToString(CultureInfo.InvariantCulture),
+                DependencyBudgetSummary = "5 external",
+                ProtocolPortsSummary = profile is null
+                    ? $"Transfer {WarpinatorProtocolDefaults.TransferPort}, auth {WarpinatorProtocolDefaults.AuthenticationPort}"
+                    : $"Transfer {profile.TransferPort}, auth {profile.AuthenticationPort}",
+                ApiVersionsSummary = string.Join(", ", WarpinatorProtocolDefaults.SupportedApiVersions),
+                GroupCodeSummary = profile?.GroupCode ?? settings.GroupCode,
+                RpcSurfaceSummary = $"{WarpinatorProtocolDefaults.TransferServiceMethods.Count} transfer RPCs, {WarpinatorProtocolDefaults.RegistrationServiceMethods.Count} registration RPCs",
+                SaveFolderSummary = profile?.SaveFolderPath ?? settings.SaveFolderPath,
+                Peers = peers.Values
+                    .OrderBy(peer => peer.DisplayName, StringComparer.OrdinalIgnoreCase)
+                    .Select(peer => new WarpinatorRuntimePeer
+                    {
+                        Id = peer.Id,
+                        DisplayName = string.IsNullOrWhiteSpace(peer.DisplayName) ? peer.Id : peer.DisplayName,
+                        Endpoint = string.IsNullOrWhiteSpace(peer.Address) ? "No endpoint yet" : $"{peer.Address}:{peer.TransferPort}",
+                        Details = peer.Details,
+                        Availability = peer.Availability
+                    })
+                    .Cast<WarpinatorRuntimePeer>()
+                    .ToArray(),
+                Transfers = transferSnapshots
+            };
+        }
 
         RuntimeLog.Write($"Snapshot published: phase={snapshot.CurrentPhase}, peers={snapshot.PeerCountSummary}, status={snapshot.StatusMessage}");
         SnapshotChanged?.Invoke(this, snapshot);
@@ -1301,6 +1503,8 @@ public sealed class WarpinatorRuntime : IDisposable
         public string Details { get; set; } = string.Empty;
 
         public bool IsRegistering { get; set; }
+
+        public bool DuplexRecoveryAttempted { get; set; }
 
         public string? RemoteCertificatePem { get; set; }
 
@@ -1401,6 +1605,11 @@ public sealed class WarpinatorRuntime : IDisposable
 
     private static double GetTransferProgressPercent(RuntimeTransferState transfer)
     {
+        if (string.Equals(transfer.Status, "Completed", StringComparison.OrdinalIgnoreCase))
+        {
+            return 100;
+        }
+
         if (transfer.TotalSize == 0)
         {
             return 0;
@@ -1411,7 +1620,7 @@ public sealed class WarpinatorRuntime : IDisposable
 
     private static string GetTransferProgressSummary(RuntimeTransferState transfer)
     {
-        if (transfer.TotalSize == 0)
+        if (transfer.TotalSize == 0 && IsTransferActive(transfer))
         {
             return "Preparing transfer";
         }

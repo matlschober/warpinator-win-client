@@ -6,8 +6,8 @@ A lightweight Windows 11 desktop client that can discover Linux Warpinator peers
 
 Current status:
 
-- Bidirectional file transfer is implemented; Linux-to-Windows transfers have previously succeeded on a real LAN
-- A receive compatibility fix for duplicate Linux peer registration is awaiting a fresh live transfer check
+- Bidirectional file transfer is implemented; live Linux-to-Windows FLAC receive and automatic reconnection after a Windows restart are verified
+- Receive completion follows Warpinator's stream status and item count; advertised sizes can include disk allocation overhead
 - Peer discovery, registration, secure session maintenance, send, and receive are implemented
 - The current UI supports progress, ETA, drag-and-drop sending, and revealing received files in Explorer
 - Folder transfer, queue depth, richer approvals, and notifications are still planned
@@ -15,7 +15,9 @@ Current status:
 ## Features
 
 - Discover Linux Warpinator peers over the local network
+- Search again with the Search button; automatic discovery retries every 10 seconds
 - Pair using Warpinator-compatible registration and certificate exchange
+- Recover a stale Linux return connection after a Windows restart with a targeted registration refresh
 - Send files from Windows to Linux
 - Receive files from Linux to Windows
 - Show live transfer progress and estimated time remaining
@@ -25,11 +27,14 @@ Current status:
 ## Requirements
 
 - Windows 11
-- .NET SDK 7.0.x to build from source
+- [.NET 10 SDK](https://dotnet.microsoft.com/en-us/download/dotnet/10.0) to build from source (includes the Windows Desktop Runtime on Windows)
+- .NET 10 Windows Desktop Runtime to run the framework-dependent published app
 - A Linux machine running Warpinator on the same LAN
 - Matching Warpinator group code on both sides
 
 ## Build
+
+`global.json` selects a stable .NET 10 SDK and allows newer .NET 10 feature bands and patches.
 
 ```powershell
 dotnet restore .\WarpinatorWinClient.sln
@@ -47,6 +52,14 @@ Run the isolated TLS/gRPC receive regression checks (no Linux peer required):
 ```powershell
 dotnet run --project .\WarpinatorWinClient.InteropTests\WarpinatorWinClient.InteropTests.csproj -c Release
 ```
+
+For a live discovery and secure connection check against Linux, close the Windows app to free its ports, leave Warpinator open on Linux, then run:
+
+```powershell
+dotnet run --project .\WarpinatorWinClient.InteropTests\WarpinatorWinClient.InteropTests.csproj -c Release -- --discover
+```
+
+The check waits up to 30 seconds after the initial search for a connected peer, then repeats the search to verify that the connection is preserved. Runtime diagnostics are saved to `%LOCALAPPDATA%\WarpinatorWinClient\runtime.log`.
 
 ## Publish
 
@@ -70,7 +83,7 @@ The GitHub Actions workflow also produces a zipped Windows artifact automaticall
 - Folder transfer is not complete yet
 - Multi-file sending currently runs sequentially
 - Symbolic-link transfers are not supported
-- The project currently targets `.NET 7`; upgrading later is expected
+- The protocol carries no exact per-file lengths or checksums. Receive validation detects gRPC errors and missing items; advertised disk-space totals cannot prove byte-level completeness.
 
 ## Contributing
 

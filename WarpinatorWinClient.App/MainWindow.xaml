@@ -42,11 +42,23 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
-                        <Border Background="{TemplateBinding Background}"
+                        <Border x:Name="Chrome" Background="{TemplateBinding Background}"
+                                Padding="{TemplateBinding Padding}"
                                 CornerRadius="18">
                             <ContentPresenter HorizontalAlignment="Center"
                                               VerticalAlignment="Center" />
                         </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Chrome" Property="Opacity" Value="0.85" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Chrome" Property="Opacity" Value="0.65" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="Chrome" Property="Opacity" Value="0.45" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
@@ -158,8 +170,15 @@
                         </Grid>
 
                         <StackPanel Grid.Row="2" Margin="0,30,0,0">
-                            <TextBlock Style="{StaticResource LabelStyle}" Text="Connection field" />
-                            <TextBlock Margin="0,12,0,0" FontSize="14" Foreground="#FFE6FBFF" Text="{Binding TransferReadiness}" />
+                            <DockPanel>
+                                <Button x:Name="SearchPeersButton" DockPanel.Dock="Right" HorizontalAlignment="Right"
+                                        Style="{StaticResource QuietButtonStyle}" Padding="12,8"
+                                        Click="SearchPeersClicked" Content="{Binding SearchButtonText}"
+                                        IsEnabled="{Binding CanSearch}" ToolTip="Search for nearby Warpinator devices" />
+                                <TextBlock Style="{StaticResource LabelStyle}" VerticalAlignment="Center" Text="Devices" />
+                            </DockPanel>
+                            <TextBlock Margin="0,12,0,0" FontSize="14" TextWrapping="Wrap" Foreground="#FFE6FBFF" Text="{Binding TransferReadiness}" />
+                            <TextBlock Margin="0,8,0,0" FontSize="12" TextWrapping="Wrap" Foreground="#99B6C6D1" Text="{Binding StatusMessage}" />
                             <Border Style="{StaticResource DividerStyle}" />
                             <ItemsControl ItemsSource="{Binding Peers}">
                                 <ItemsControl.ItemTemplate>
@@ -167,10 +186,12 @@
                                         <Border Margin="0,0,0,14" Padding="16,15" Background="#111A2A35" CornerRadius="20">
                                             <StackPanel>
                                                 <DockPanel>
-                                                    <TextBlock FontSize="17" FontWeight="SemiBold" Foreground="#FFF4FCFF" Text="{Binding DisplayName}" />
                                                     <Border DockPanel.Dock="Right" Padding="10,5" Background="#1539E4F5" CornerRadius="12">
                                                         <TextBlock FontSize="11" FontWeight="SemiBold" Foreground="#FFB7FEFF" Text="{Binding Availability}" />
                                                     </Border>
+                                                    <TextBlock Margin="0,0,8,0" VerticalAlignment="Center" FontSize="17" FontWeight="SemiBold"
+                                                               Foreground="#FFF4FCFF" Text="{Binding DisplayName}" TextTrimming="CharacterEllipsis"
+                                                               ToolTip="{Binding DisplayName}" />
                                                 </DockPanel>
                                                 <TextBlock Margin="0,6,0,0" FontSize="12" Foreground="#99B6C6D1" Text="{Binding Endpoint}" />
                                                 <TextBlock Margin="0,8,0,0" FontSize="12" LineHeight="18" TextWrapping="Wrap" Foreground="#AAC8D6E0" Text="{Binding Details}" />
@@ -206,7 +227,7 @@
                         </StackPanel>
                         <StackPanel Grid.Column="1" Orientation="Horizontal">
                             <Border Padding="12,9" Margin="0,0,12,0" Background="#1237D8EA" CornerRadius="16">
-                                <TextBlock FontSize="12" FontWeight="SemiBold" Foreground="#FFBFFDFF" Text="Bidirectional sync online" />
+                                <TextBlock FontSize="12" FontWeight="SemiBold" Foreground="#FFBFFDFF" Text="{Binding ConnectionSummary}" />
                             </Border>
                             <Button Style="{StaticResource ActionButtonStyle}" Click="SendFileClicked" Content="Send File" />
                         </StackPanel>

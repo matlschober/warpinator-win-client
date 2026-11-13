@@ -13,6 +13,7 @@ internal sealed class IncomingTransferWriter : IDisposable
 
     private readonly string saveRootPath;
     private readonly HashSet<string> allowedTopLevelNames;
+    private readonly HashSet<string> receivedPaths = new(StringComparer.OrdinalIgnoreCase);
 
     private FileStream? currentStream;
     private string? currentRelativePath;
@@ -21,6 +22,8 @@ internal sealed class IncomingTransferWriter : IDisposable
     private uint currentModifiedTimeUsec;
 
     public string RevealPath { get; }
+
+    public ulong ReceivedItemCount => (ulong)receivedPaths.Count;
 
     public IncomingTransferWriter(string saveRootPath, IEnumerable<string> topLevelNames)
     {
@@ -61,6 +64,7 @@ internal sealed class IncomingTransferWriter : IDisposable
         if (chunk.FileType == DirectoryFileType)
         {
             Directory.CreateDirectory(resolvedPath);
+            receivedPaths.Add(resolvedPath);
             return;
         }
 
@@ -76,6 +80,8 @@ internal sealed class IncomingTransferWriter : IDisposable
         {
             chunk.Chunk.WriteTo(currentStream);
         }
+
+        receivedPaths.Add(resolvedPath);
     }
 
     public void Complete()

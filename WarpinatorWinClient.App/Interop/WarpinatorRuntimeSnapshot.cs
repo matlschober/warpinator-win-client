@@ -5,6 +5,10 @@ namespace WarpinatorWinClient.App.Interop;
 
 public sealed class WarpinatorRuntimeSnapshot
 {
+    public bool IsRunning { get; init; }
+
+    public bool IsSearching { get; init; }
+
     public string StatusMessage { get; init; } = string.Empty;
 
     public string CurrentPhase { get; init; } = string.Empty;

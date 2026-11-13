@@ -13,15 +13,15 @@ Rules:
 
 ## Confirmed Local Tooling
 
-- .NET SDK 7.0.101
-- Microsoft.WindowsDesktop.App 7.0.1 runtime
-- Microsoft.NETCore.App 7.0.1 runtime
+- .NET SDK 10.0.404 (stable .NET 10 feature bands and patches selected by `global.json`)
+- Microsoft.WindowsDesktop.App 10.0.15 runtime
+- Microsoft.NETCore.App 10.0.15 runtime
 
 ## Approved Baseline
 
 Current project dependencies:
 
-- .NET 7 SDK
+- .NET 10 SDK (LTS)
   - Purpose: build the application
   - Type: build/runtime platform
   - Status: available locally
@@ -82,6 +82,11 @@ Areas we expect to keep dependency-free:
 
 ## Change Log
 
+- 2026-11-13: Added targeted duplex-timeout registration recovery using the existing gRPC registration service; dependency set unchanged
+- 2026-11-13: Corrected receive completion for Linux's allocated-size metadata and added item-count and stream-error regression coverage without adding dependencies
+- 2026-11-13: Fixed discovery retries and added the Search action, isolated regression checks, and a live discovery diagnostic using the existing .NET, WPF, and mDNS dependencies
+- 2026-11-13: Standardized the app, core library, regression runner, and Windows CI on .NET 10 LTS without adding NuGet dependencies; added stable SDK selection in `global.json`
+- 2026-11-13: Removed obsolete framework build outputs, intermediate files, and the old receive-fix publication from the workspace
 - 2026-03-27: Created dependency tracking document with no external packages approved yet
 - 2026-03-27: Scaffolded the WPF application and confirmed it builds successfully without adding any external NuGet packages
 - 2026-03-27: Added the internal core project and kept the external NuGet dependency count at zero while capturing upstream protocol defaults and service contracts

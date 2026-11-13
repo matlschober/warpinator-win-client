@@ -4,7 +4,7 @@ Thanks for helping improve the project.
 
 ## Development Setup
 
-1. Install the .NET 7 SDK on Windows.
+1. Install the [.NET 10 SDK](https://dotnet.microsoft.com/en-us/download/dotnet/10.0) on Windows. The repository's `global.json` selects a stable .NET 10 SDK.
 2. Clone the repository.
 3. Restore and build:
 

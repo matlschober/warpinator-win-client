@@ -30,7 +30,19 @@ public partial class MainWindow : Window
 
     private async void MainWindowLoaded(object sender, RoutedEventArgs e)
     {
-        await runtime.StartAsync(CancellationToken.None);
+        await Task.Run(() => runtime.StartAsync(CancellationToken.None));
+    }
+
+    private async void SearchPeersClicked(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            await Task.Run(() => runtime.SearchPeersAsync());
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, ex.Message, "Search failed", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
     }
 
     private async void SendFileClicked(object sender, RoutedEventArgs e)
@@ -103,7 +115,10 @@ public partial class MainWindow : Window
 
     private void RuntimeSnapshotChanged(object? sender, WarpinatorRuntimeSnapshot snapshot)
     {
-        Dispatcher.Invoke(() => viewModel.ApplyRuntimeSnapshot(snapshot));
+        if (!Dispatcher.HasShutdownStarted)
+        {
+            _ = Dispatcher.InvokeAsync(() => viewModel.ApplyRuntimeSnapshot(snapshot));
+        }
     }
 
     private void MainWindowClosed(object? sender, EventArgs e)
